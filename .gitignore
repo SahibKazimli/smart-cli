@@ -1,0 +1,19 @@
+# Python
+rag/venv/
+__pycache__/
+*.pyc
+
+# Go
+*.exe
+*.out
+
+# IDEs
+.vscode/
+.idea/
+
+# API keys and env
+credentials/
+.env
+
+# OS
+.DS_Store
