@@ -15,17 +15,17 @@ credentialsPath = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = credentialsPath
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 
-project_id = os.getenv("GCP_PROJECT_ID", "my-default-project")
+projectID = os.getenv("GCP_PROJECT_ID", "my-default-project")
 
 init(
-    project=project_id, 
+    project=projectID, 
     location="us-central1"
 )
 
 modelName = "gemini-2.5-pro"
-embedding_model = VertexAIEmbeddings(model_name="text-embedding-004")
-embedding_model._LanguageModel = VertexAI(model_name="text-embedding-004")
-embedding_model.model_rebuild()
+embeddingModel = VertexAIEmbeddings(model_name="text-embedding-004")
+embeddingModel._LanguageModel = VertexAI(model_name="text-embedding-004")
+embeddingModel.model_rebuild()
 
 
 instructLLM = ChatVertexAI(
@@ -60,7 +60,7 @@ promptTemplate = """
 
 def getVectorStore(folderName:str):
     indexName = folderName + "_index"
-    return Redis(redis_url=REDIS_URL, index_name=indexName, embedding=embedding_model)
+    return Redis(redis_url=REDIS_URL, index_name=indexName, embedding=embeddingModel)
 
 
 def retrieveChunks(query:str, folderName:str, k=5) -> List[Dict]:
