@@ -1,7 +1,9 @@
 from langchain_google_vertexai import ChatVertexAI
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from langchain.vectorstores import Redis
 from vertexai import init
+from typing import List, Dict
 from dotenv import load_dotenv
 import os
 
@@ -10,6 +12,7 @@ import os
 load_dotenv()
 credentialsPath = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = credentialsPath
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 
 project_id = os.getenv("GCP_PROJECT_ID", "my-default-project")
 
@@ -49,3 +52,14 @@ promptTemplate = """
 </task>"""
 
 
+
+def getVectorStore(folderName:str):
+    indexName = folderName + "_index"
+    return Redis(redis_url=REDIS_URL, index_name=indexName)
+
+
+def retrieveChunks(query:str, folderName:str, k=5) -> List[Dict]:
+    # Retrieve the relevant chunks (k nearest neighbours)
+    vectorStore = getVectorStore(folderName)
+    
+    
