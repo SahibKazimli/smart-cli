@@ -1,1 +1,3 @@
-package smart_cli
+package main
+
+

@@ -1,8 +1,8 @@
-import os
-from langchain.embeddings import VertexAIEmbeddings
-from langchain.vectorstores import Redis
+from langchain_community.embeddings import VertexAIEmbeddings
+from langchain_community.vectorstores import Redis
 from langchain.text_splitter import CharacterTextSplitter
 from dotenv import load_dotenv
+import os
 
 """Prototyped version of the RAG capability. I'll be using redis
 and generating index names dynamically based on the folder the user
@@ -11,9 +11,10 @@ is in. """
 
 load_dotenv()
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+embedding_model = VertexAIEmbeddings(model_name="text-embedding-004")
 
 class CodeIngestor:
-    def __init__(self, embedding_model_name="text-embedding-004", chunk_size=300, chunk_overlap=20):
+    def __init__(self, embedding_model_name=embedding_model, chunk_size=300, chunk_overlap=20):
         self.embedding_model = VertexAIEmbeddings(model_name=embedding_model_name)
         self.text_splitter = CharacterTextSplitter(
             separator="\n",
@@ -44,7 +45,8 @@ class CodeIngestor:
         index_name = os.path.basename(os.path.normpath(folder_path)) + "_index"
         self.redis_vector = Redis(
             redis_url=REDIS_URL,
-            index_name=index_name
+            index_name=index_name,
+            embedding=embedding_model
         )
         
         for root, _, files in os.walk(folder_path):

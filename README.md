@@ -21,3 +21,8 @@ A modular, AI-enhanced command-line interface that provides code review, error e
 - Colored/progress-enhanced terminal output.
 - Context/history tracking for smarter suggestions.
 
+
+## Future development after MVP
+
+- Retrieval augmeneted generation with Redis database
+

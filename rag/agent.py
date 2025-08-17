@@ -1,7 +1,8 @@
 from langchain_google_vertexai import ChatVertexAI
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain.vectorstores import Redis
+from langchain_google_vertexai import VertexAIEmbeddings, VertexAI
+from langchain_community.vectorstores import Redis
 from vertexai import init
 from typing import List, Dict
 from dotenv import load_dotenv
@@ -22,6 +23,10 @@ init(
 )
 
 modelName = "gemini-2.5-pro"
+embedding_model = VertexAIEmbeddings(model_name="text-embedding-004")
+embedding_model._LanguageModel = VertexAI(model_name="text-embedding-004")
+embedding_model.model_rebuild()
+
 
 instructLLM = ChatVertexAI(
     model_name=modelName,
@@ -55,11 +60,16 @@ promptTemplate = """
 
 def getVectorStore(folderName:str):
     indexName = folderName + "_index"
-    return Redis(redis_url=REDIS_URL, index_name=indexName)
+    return Redis(redis_url=REDIS_URL, index_name=indexName, embedding=embedding_model)
 
 
 def retrieveChunks(query:str, folderName:str, k=5) -> List[Dict]:
     # Retrieve the relevant chunks (k nearest neighbours)
     vectorStore = getVectorStore(folderName)
     
+    # similarity_search returns List
+    chunks = vectorStore.similarity_search(query, k=k)
+    return [{"text": chunk.page_content, "metadata": chunk.metadata} for chunk in chunks]
+
+
     
