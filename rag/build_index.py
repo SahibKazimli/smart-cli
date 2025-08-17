@@ -1,9 +1,9 @@
-from langchain_community.embeddings import VertexAIEmbeddings
 from langchain_community.vectorstores import Redis
 from langchain.text_splitter import CharacterTextSplitter
 from dotenv import load_dotenv
 import os
-from langchain_google_vertexai import VertexAI
+# Correct import for VertexAIEmbeddings
+from langchain_google_vertexai import VertexAIEmbeddings
 from vertexai import init
 
 """Prototyped version of the RAG capability. I'll be using redis
@@ -20,9 +20,8 @@ init(
     location="us-central1"
 )
 
+
 embeddingModel = VertexAIEmbeddings(model_name="text-embedding-004")
-embeddingModel._LanguageModel = VertexAI(model_name="text-embedding-004")
-embeddingModel.model_rebuild()
 
 
 class CodeIngestor:
@@ -34,7 +33,7 @@ class CodeIngestor:
             chunk_overlap=chunkOverlap
         )
         self.redisVector = None
-        
+
 
     def readCodeFile(self, filePath):
         with open(filePath, "r") as f:
@@ -49,26 +48,31 @@ class CodeIngestor:
         embeddings = self.embeddingModel.embed_documents(chunks)
         self.redisVector.add_texts(chunks, metadatas=metadata or [{}])
         return embeddings
-    
+
 
     def ingestFolder(self, folderPath, fileExtensions=(".py", ".go", ".cpp")):
         indexName = os.path.basename(os.path.normpath(folderPath)) + "_index"
         self.redisVector = Redis(
             redis_url=redisUrl,
             index_name=indexName,
-            embedding=self.embeddingModel
+            embedding=self.embeddingModel 
         )
 
         for root, _, files in os.walk(folderPath):
             for file in files:
                 if file.endswith(fileExtensions):
                     fullPath = os.path.join(root, file)
-                    codeText = self.readCodeFile(fullPath)
-                    chunks = self.chunkCode(codeText)
-                    metadatas = [{"file": file, "chunk": i} for i in range(len(chunks))]
-                    self.embedAndStore(chunks, metadata=metadatas)
-                    print(f"Ingested {file} ({len(chunks)} chunks)")
-                    
+                    print(f"Ingesting: {fullPath}") 
+                    try:
+                        codeText = self.readCodeFile(fullPath)
+                        chunks = self.chunkCode(codeText)
+                        # Ensure metadata has a 'file' and 'chunk' index for each chunk
+                        metadatas = [{"file": file, "chunk": i} for i in range(len(chunks))]
+                        self.embedAndStore(chunks, metadata=metadatas)
+                        print(f"Ingested {fullPath} ({len(chunks)} chunks)")
+                    except Exception as e:
+                        print(f"Error ingesting {fullPath}: {e}")
+
 
 if __name__ == "__main__":
     ingestor = CodeIngestor()

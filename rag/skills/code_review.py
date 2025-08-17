@@ -1,6 +1,3 @@
-from langchain_google_vertexai import ChatVertexAI  
-from langchain.prompts import ChatPromptTemplate       
-from langchain_core.output_parsers import StrOutputParser  
 from langchain_community.vectorstores import Redis
 from typing import List, Dict
 from dotenv import load_dotenv
