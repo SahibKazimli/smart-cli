@@ -1,8 +1,7 @@
-from langchain_community.vectorstores import Redis
+from langchain_redis import RedisVectorStore
 from langchain.text_splitter import CharacterTextSplitter
 from dotenv import load_dotenv
 import os
-# Correct import for VertexAIEmbeddings
 from langchain_google_vertexai import VertexAIEmbeddings
 from vertexai import init
 
@@ -20,7 +19,6 @@ init(
     location="us-central1"
 )
 
-
 embeddingModel = VertexAIEmbeddings(model_name="text-embedding-004")
 
 
@@ -33,6 +31,8 @@ class CodeIngestor:
             chunk_overlap=chunkOverlap
         )
         self.redisVector = None
+        self.ignore_dirs = {'venv', '.venv', '.git', '__pycache__', 'node_modules'}
+        self.include_extensions = {'.py', '.go', '.cpp', '.js', '.ts', '.java', '.sh'}
 
 
     def readCodeFile(self, filePath):
@@ -45,35 +45,66 @@ class CodeIngestor:
 
 
     def embedAndStore(self, chunks, metadata=None):
-        embeddings = self.embeddingModel.embed_documents(chunks)
+        # For langchain-redis, add_texts is the correct method.
+        # It internally handles embedding if not already done.
         self.redisVector.add_texts(chunks, metadatas=metadata or [{}])
-        return embeddings
 
 
-    def ingestFolder(self, folderPath, fileExtensions=(".py", ".go", ".cpp")):
+    def ingestFolder(self, folderPath, fileExtensions=None):
+        # Convert the list of extensions to a tuple for file.endswith()
+        if fileExtensions is None:
+            extensions_tuple = tuple(self.include_extensions)
+        else:
+            # Ensure the input is a tuple, even if a list was passed
+            extensions_tuple = tuple(fileExtensions)
+
+        if not extensions_tuple: # Handle case where no extensions are specified
+            print("No file extensions specified for ingestion.")
+            return
+
         indexName = os.path.basename(os.path.normpath(folderPath)) + "_index"
-        self.redisVector = Redis(
+        print(f"Indexing into Redis with index name: {indexName}")
+
+        
+        self.redisVector = RedisVectorStore(
             redis_url=redisUrl,
             index_name=indexName,
-            embedding=self.embeddingModel 
+            embeddings=self.embeddingModel 
         )
 
-        for root, _, files in os.walk(folderPath):
+        for root, dirs, files in os.walk(folderPath, topdown=True):
+            # Modify dirs in-place to prevent os.walk from descending into ignored directories
+            dirs[:] = [d for d in dirs if d not in self.ignore_dirs]
+
             for file in files:
-                if file.endswith(fileExtensions):
+                # Check if the file extension is in our allowed tuple
+                # file.endswith() accepts a tuple of strings
+                if file.lower().endswith(extensions_tuple):
                     fullPath = os.path.join(root, file)
-                    print(f"Ingesting: {fullPath}") 
+                    print(f"Ingesting: {fullPath}")
                     try:
                         codeText = self.readCodeFile(fullPath)
                         chunks = self.chunkCode(codeText)
-                        # Ensure metadata has a 'file' and 'chunk' index for each chunk
-                        metadatas = [{"file": file, "chunk": i} for i in range(len(chunks))]
+                        # Use relative path for metadata
+                        metadatas = [{"file": os.path.relpath(fullPath, folderPath), "chunk": i} for i in range(len(chunks))]
                         self.embedAndStore(chunks, metadata=metadatas)
                         print(f"Ingested {fullPath} ({len(chunks)} chunks)")
                     except Exception as e:
                         print(f"Error ingesting {fullPath}: {e}")
+                        
 
 
 if __name__ == "__main__":
+    # Create dummy files if they don't exist for a quick test
+    if not os.path.exists("sample_code_1.py"):
+        with open("sample_code_1.py", "w") as f:
+            f.write("def greet(name):\n    print(f'Hello, {name}!')\n\ngreet('World')")
+    if not os.path.exists("sample_code_2.go"):
+        with open("sample_code_2.go", "w") as f:
+            f.write("package main\n\nimport \"fmt\"\n\nfunc main() {\n    fmt.Println(\"Hello, Go!\")\n}")
+
     ingestor = CodeIngestor()
-    ingestor.ingestFolder(".")
+
+    # Strategy 1: Ingest only specific files in the current directory
+    print("\n--- Ingesting specific sample files (Python and Go) ---")
+    ingestor.ingestFolder(".", fileExtensions=['.py', '.go'])
