@@ -93,18 +93,10 @@ class CodeIngestor:
                         print(f"Error ingesting {fullPath}: {e}")
                         
 
-
 if __name__ == "__main__":
-    # Create dummy files if they don't exist for a quick test
-    if not os.path.exists("sample_code_1.py"):
-        with open("sample_code_1.py", "w") as f:
-            f.write("def greet(name):\n    print(f'Hello, {name}!')\n\ngreet('World')")
-    if not os.path.exists("sample_code_2.go"):
-        with open("sample_code_2.go", "w") as f:
-            f.write("package main\n\nimport \"fmt\"\n\nfunc main() {\n    fmt.Println(\"Hello, Go!\")\n}")
-
+    load_dotenv()
+    cwd = os.getcwd()  # wherever the user triggers this script from
+    print(f"\n--- Ingesting from working directory: {cwd} ---")
+    
     ingestor = CodeIngestor()
-
-    # Strategy 1: Ingest only specific files in the current directory
-    print("\n--- Ingesting specific sample files (Python and Go) ---")
-    ingestor.ingestFolder(".", fileExtensions=['.py', '.go'])
+    ingestor.ingestFolder(cwd, fileExtensions=['.py', '.go'])

@@ -97,10 +97,12 @@ def generateResponse(query: str, indexName: str, k=5):
 if __name__ == "__main__":
     query = "What does build_index.py do?"
     print(query)
-    indexName = "._index"
+    # dynamically derive index name based on current working directory
+    cwd = os.getcwd()
+    folder_name = os.path.basename(cwd)
+    indexName = f"{folder_name}_index"
     response = generateResponse(query, indexName)
     print("LLM response:\n", response)
-
 
 
 
