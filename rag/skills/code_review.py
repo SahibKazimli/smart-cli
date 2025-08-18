@@ -1,7 +1,6 @@
-from langchain_community.vectorstores import Redis
+from langchain_redis import RedisVectorStore
 from typing import List, Dict
 from dotenv import load_dotenv
-from ..agent import retrieveChunks
 import os
 
 load_dotenv() 
@@ -12,6 +11,7 @@ print(os.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
 
 def codeReview(query: str, folderName: str) -> Dict: 
     # Retrieves relevant code chunks from redis, and accepts a query
+    from ..agent import retrieveChunks
     chunks: List[Dict] = retrieveChunks(query, folderName, k=5)
     return {"query": query, "retrievedChunks":chunks}
 
