@@ -2,27 +2,24 @@ from langchain_google_vertexai import ChatVertexAI
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_google_vertexai import VertexAIEmbeddings
-from langchain_community.vectorstores import Redis
-from skills.code_review import codeReview
+from langchain_redis import RedisVectorStore
+from .skills.code_review import codeReview 
 from vertexai import init
 from typing import List, Dict
 from dotenv import load_dotenv
 import os
-
 
 # Loading in credentials and necessary ID's
 load_dotenv()
 credentialsPath = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = credentialsPath
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
-
 projectID = os.getenv("GCP_PROJECT_ID", "my-default-project")
-
 
 
 init(
     project=projectID,
-    location="us-central1" # Ensure this matches your Vertex AI setup
+    location="us-central1"
 )
 
 modelName = "gemini-2.5-pro"
@@ -34,7 +31,6 @@ instructLLM = ChatVertexAI(
     temperature=0.2,
     max_output_tokens=400
 )
-
 
 promptTemplate = """
 <task>
@@ -58,10 +54,11 @@ promptTemplate = """
 </task>"""
 
 
+chatPrompt = ChatPromptTemplate.from_template(promptTemplate)
 
 def getVectorStore(folderName:str):
     indexName = folderName + "_index"
-    return Redis(redis_url=REDIS_URL, index_name=indexName, embedding=embeddingModel)
+    return RedisVectorStore(redis_url=REDIS_URL, index_name=indexName, embeddings=embeddingModel)
 
 
 def retrieveChunks(query:str, folderName:str, k=5) -> List[Dict]:
@@ -75,8 +72,25 @@ def retrieveChunks(query:str, folderName:str, k=5) -> List[Dict]:
     return [{"text": chunk.page_content, "metadata": chunk.metadata} for chunk in chunks]
 
 
+
+def generateResponse(query: str, folderName: str, k=5):
+    chunks = retrieveChunks(query, folderName, k=5)
+    context = "\n".join([chunk["text"] for chunk in chunks])
+    
+    fullPrompt = f"{promptTemplate}\n<context>\n{context}\n</context>\nUser question: {query}"
+    chain = chatPrompt| instructLLM | StrOutputParser()
+    return chain.invoke({"input": fullPrompt})
+    
+
+
 if __name__ == "__main__":
-    # Make sure you have ingested data for "smart-cli" folder before running this
-    print("Retrieving code review chunks...")
-    result = codeReview("Review build_index.py", "smart-cli")
-    print(result)
+    query = "What does build_index.py do?"
+    print(query)
+    folderName = "._index"
+    response = generateResponse(query, folderName)
+    print("LLM response:\n", response)
+
+
+
+
+
