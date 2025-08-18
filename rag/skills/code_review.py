@@ -6,15 +6,14 @@ import os
 load_dotenv() 
 credentialsPath = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = credentialsPath
-print(os.getenv("GOOGLE_APPLICATION_CREDENTIALS"))  
 
 
-def codeReview(query: str, folderName: str) -> Dict: 
+def codeReview(query: str, indexName: str) -> Dict: 
     # Retrieves relevant code chunks from redis, and accepts a query
     from ..agent import retrieveChunks
-    chunks: List[Dict] = retrieveChunks(query, folderName, k=5)
+    chunks: List[Dict] = retrieveChunks(query, indexName, k=5)
     return {"query": query, "retrievedChunks":chunks}
 
 if __name__ == "__main__":
-    result = codeReview("Review build_index.py", "smart-cli")
+    result = codeReview("Review build_index.py", "._index")
     print(result)

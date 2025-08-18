@@ -29,7 +29,7 @@ embeddingModel = VertexAIEmbeddings(model_name="text-embedding-004")
 instructLLM = ChatVertexAI(
     model_name=modelName,
     temperature=0.2,
-    max_output_tokens=400
+    max_output_tokens=2000
 )
 
 promptTemplate = """
@@ -48,22 +48,28 @@ promptTemplate = """
     - Use plain text or simple structured output.
   </response_format>
   <constraints>
-    - Maximum response: 300 tokens.
+    - You may use available tokens to understand context.
+    - But the response must be 300 tokens maximum.
     - Be precise and relevant to the input provided.
   </constraints>
-</task>"""
+</task>
+
+<context>
+{context}
+</context>
+User question: {query}
+"""
 
 
 chatPrompt = ChatPromptTemplate.from_template(promptTemplate)
 
-def getVectorStore(folderName:str):
-    indexName = folderName + "_index"
+def getVectorStore(indexName:str):
     return RedisVectorStore(redis_url=REDIS_URL, index_name=indexName, embeddings=embeddingModel)
 
 
-def retrieveChunks(query:str, folderName:str, k=5) -> List[Dict]:
+def retrieveChunks(query:str, indexName:str, k=5) -> List[Dict]:
     # Retrieve the relevant chunks (k nearest neighbours)
-    vectorStore = getVectorStore(folderName)
+    vectorStore = getVectorStore(indexName)
 
     # similarity_search returns List of Document objects
     chunks = vectorStore.similarity_search(query, k=k)
@@ -73,23 +79,30 @@ def retrieveChunks(query:str, folderName:str, k=5) -> List[Dict]:
 
 
 
-def generateResponse(query: str, folderName: str, k=5):
-    chunks = retrieveChunks(query, folderName, k=5)
+def generateResponse(query: str, indexName: str, k=5):
+    chunks = retrieveChunks(query, indexName, k=k)
     context = "\n".join([chunk["text"] for chunk in chunks])
     
-    fullPrompt = f"{promptTemplate}\n<context>\n{context}\n</context>\nUser question: {query}"
-    chain = chatPrompt| instructLLM | StrOutputParser()
-    return chain.invoke({"input": fullPrompt})
+    print("--- Retrieved Chunks ---")
+    for i, chunk in enumerate(chunks):
+        print(f"{i}: {chunk['text']}")
+    print("Context length:", len(context))
+
+    # Fill the prompt template
+    fullPrompt = chatPrompt.format(context=context, query=query)
+
+    # Call the LLM
+    response = instructLLM.invoke(fullPrompt)
+    return response
     
 
 
 if __name__ == "__main__":
     query = "What does build_index.py do?"
     print(query)
-    folderName = "._index"
-    response = generateResponse(query, folderName)
+    indexName = "._index"
+    response = generateResponse(query, indexName)
     print("LLM response:\n", response)
-
 
 
 
