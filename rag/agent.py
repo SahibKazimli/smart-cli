@@ -29,13 +29,14 @@ embeddingModel = VertexAIEmbeddings(model_name="text-embedding-004")
 instructLLM = ChatVertexAI(
     model_name=modelName,
     temperature=0.2,
-    max_output_tokens=2000
+    max_output_tokens=3500
 )
 
 promptTemplate = """
 <task>
   <description>
     You are an AI assistant integrated into a command-line interface.
+    Explain things in plain text, without Markdown or special formatting.
     Your job is to:
     - Review code snippets and highlight potential errors.
     - Explain errors in clear, concise language.
@@ -49,7 +50,7 @@ promptTemplate = """
   </response_format>
   <constraints>
     - You may use available tokens to understand context.
-    - But the response must be 300 tokens maximum.
+    - But the response must be 500 tokens maximum.
     - Be precise and relevant to the input provided.
   </constraints>
 </task>
@@ -82,18 +83,14 @@ def retrieveChunks(query:str, indexName:str, k=5) -> List[Dict]:
 def generateResponse(query: str, indexName: str, k=5):
     chunks = retrieveChunks(query, indexName, k=k)
     context = "\n".join([chunk["text"] for chunk in chunks])
-    
-    print("--- Retrieved Chunks ---")
-    for i, chunk in enumerate(chunks):
-        print(f"{i}: {chunk['text']}")
-    print("Context length:", len(context))
 
     # Fill the prompt template
     fullPrompt = chatPrompt.format(context=context, query=query)
 
     # Call the LLM
     response = instructLLM.invoke(fullPrompt)
-    return response
+    return response.content
+    
     
 
 
