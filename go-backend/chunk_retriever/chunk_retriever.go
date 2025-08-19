@@ -1,4 +1,4 @@
-package redisClient
+package chunk_retriever
 
 import (
 	"context"
@@ -35,7 +35,7 @@ func Connect() *redis.Client {
 	return rdb
 }
 
-func prepareQuery(queryText string, topK int) ChunkQuery {
+func PrepareQuery(queryText string, topK int) ChunkQuery {
 	// Read in files dynamically based on the directory the user is in
 	cwd, _ := os.Getwd()
 	folderName := filepath.Base(cwd)
@@ -48,21 +48,21 @@ func prepareQuery(queryText string, topK int) ChunkQuery {
 	}
 }
 
-func retrieveChunks(rdb *redis.Client, query ChunkQuery) ([]Chunk, error) {
+func RetrieveChunks(rdb *redis.Client, query ChunkQuery) ([]Chunk, error) {
 	ctx := context.Background()
 
 	// Starting with a simple search method with just text
 	// Will sort by vector similarity
 	// FT.SEARCH
 	args := []interface{}{
+		"FT.SEARCH",
 		query.IndexName,
 		"*", // match everything
-		"PARAMS", "2", "query", query.Query,
 		"RETURN", "2", "text", "metadata",
 		"LIMIT", "0", query.TopK,
 	}
 
-	res, err := rdb.Do(ctx, "FT.SEARCH", args).Result()
+	res, err := rdb.Do(ctx, args...).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -82,15 +82,33 @@ func retrieveChunks(rdb *redis.Client, query ChunkQuery) ([]Chunk, error) {
 
 		// Iterate over the key-value pairs for this result
 		for j := 0; j < len(fields); j += 2 {
-			key := string(fields[j].([]byte))
+			var key string
+			switch k := fields[j].(type) {
+			case []byte:
+				key = string(k)
+			case string:
+				key = k
+			default:
+				key = fmt.Sprintf("%v", k)
+			}
+
 			val := fields[j+1]
+			var valStr string
+			switch v := val.(type) {
+			case []byte:
+				valStr = string(v)
+			case string:
+				valStr = v
+			default:
+				valStr = fmt.Sprintf("%v", v)
+			}
 
 			// Assign text to the Text field, everything else goes into Metadata
 			switch key {
 			case "text":
-				ch.Text = fmt.Sprintf("%s", val)
+				ch.Text = valStr
 			default:
-				ch.Metadata[key] = fmt.Sprintf("%s", val)
+				ch.Metadata[key] = valStr
 			}
 		}
 		results = append(results, ch)
