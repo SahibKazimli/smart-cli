@@ -15,11 +15,12 @@ A modular, AI-enhanced command-line interface that provides code review, error e
 - Project skeleton with Go CLI and Python RAG/Agent folder.
 - Basic CLI command (code-review) calling a dummy Python skill.
 - AI integration using LangChain + Vertex AI.
-- Additional skills: error-explanation, system-check.
-- Plugin system for modular skill addition.
 - Colored/progress-enhanced terminal output.
 - Context/history tracking for smarter suggestions.
+- Parallell chunk retrieval for performance
 
-
+## Sidelined objectives for the time being
+- Additional skills: error-explanation, system-check.
+- Plugin system for modular skill addition.
 
 
