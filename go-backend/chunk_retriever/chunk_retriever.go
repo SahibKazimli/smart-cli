@@ -64,12 +64,15 @@ func getIndexes(rdb *redis.Client) ([]string, error) {
 }
 
 func getIndexName(rdb *redis.Client) (string, error) {
-	cwd := os.Getwd()
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", nil
+	}
 	folderName := filepath.Base(cwd)
 
 	indexes, err := getIndexes(rdb)
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 
 	for _, idx := range indexes {
