@@ -67,3 +67,13 @@ func ReadDirectory(dir string, extensions []string) (fileContents []string, err 
 	}
 	return
 }
+
+func (e *Embedder) EmbedDirectory(dir string, extensions []string) ([]FileEmbedding, error) {
+	files, err := ReadDirectory(dir, extensions)
+	if err != nil {
+		return nil, err
+	}
+	for _, content := range files {
+
+	}
+}
