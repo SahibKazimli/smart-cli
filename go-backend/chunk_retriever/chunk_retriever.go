@@ -1,9 +1,11 @@
 package chunk_retriever
 
 import (
+	"cloud.google.com/go/vertexai/genai"
 	"context"
 	"fmt"
 	"github.com/redis/go-redis/v9"
+	"google.golang.org/api/option"
 	"os"
 	"path/filepath"
 )
@@ -35,7 +37,7 @@ func Connect() *redis.Client {
 	return rdb
 }
 
-func PrepareQuery(queryText string, topK int) ChunkQuery {
+func PrepareQuery(queryText string, topK int) (ChunkQuery, error) {
 	// Read in files dynamically based on the directory the user is in
 	cwd, _ := os.Getwd()
 	folderName := filepath.Base(cwd)
@@ -45,12 +47,45 @@ func PrepareQuery(queryText string, topK int) ChunkQuery {
 		Query:     queryText,
 		IndexName: indexName,
 		TopK:      topK,
+	}, nil
+}
+
+func getIndexes(rdb *redis.Client) ([]string, error) {
+	ctx := context.Background()
+	res, err := rdb.Do(ctx, "FT_LIST").Result()
+	if err != nil {
+		return nil, err
 	}
+	var indexes []string
+	for _, v := range res.([]interface{}) {
+		indexes = append(indexes, fmt.Sprintf("%s", v))
+	}
+	return indexes, nil
+}
+
+func getIndexName(rdb *redis.Client) (string, error) {
+	cwd := os.Getwd()
+	folderName := filepath.Base(cwd)
+
+	indexes, err := getIndexes(rdb)
+	if err != nil {
+		return "", nil
+	}
+
+	for _, idx := range indexes {
+		if idx == folderName+"_index" {
+			return idx, nil
+		}
+	}
+	// fallback or error if no matching index
+	if len(indexes) > 0 {
+		return indexes[0], nil
+	}
+	return "", fmt.Errorf("no indexes found in Redis")
 }
 
 func RetrieveChunks(rdb *redis.Client, query ChunkQuery) ([]Chunk, error) {
 	ctx := context.Background()
-
 	// Starting with a simple search method with just text
 	// Will sort by vector similarity
 	// FT.SEARCH
