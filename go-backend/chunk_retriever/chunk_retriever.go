@@ -47,7 +47,7 @@ func PrepareQuery(queryText string, topK int, indexName string) ChunkQuery {
 
 func getIndexes(rdb *redis.Client) ([]string, error) {
 	ctx := context.Background()
-	res, err := rdb.Do(ctx, "FT_LIST").Result()
+	res, err := rdb.Do(ctx, "FT._LIST").Result()
 	if err != nil {
 		return nil, err
 	}
@@ -86,6 +86,7 @@ func GetIndexName(rdb *redis.Client) (string, error) {
 	// Fallback: return the first available index
 	return indexes[0], nil
 }
+
 func RetrieveChunks(rdb *redis.Client, query ChunkQuery) ([]Chunk, error) {
 	ctx := context.Background()
 	// Starting with a simple search method with just text
