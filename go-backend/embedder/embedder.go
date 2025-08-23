@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type FileEmbedding struct {
@@ -72,7 +73,21 @@ func ReadDirectory(dir string, extensions []string) (files []FileData, err error
 		if d.IsDir() {
 			return nil
 		}
-		// filter by extension
+		// filter by extension and folder names
+		skipDirs := map[string]struct{}{
+			"venv": {}, "__pycache__": {}, "node_modules": {}, ".git": {},
+		}
+		// And check all ancestor directories to skip dependencies
+		parts := strings.Split(path, string(os.PathSeparator))
+		for _, part := range parts {
+			if _, skip := skipDirs[part]; skip {
+				if d.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+		}
+
 		ext := filepath.Ext(path)
 		if ext == ".go" || ext == ".py" || ext == ".js" || ext == ".cpp" || ext == ".txt" {
 			// process file
@@ -107,25 +122,21 @@ func (e *Embedder) EmbedDirectory(dir string, extensions []string) ([]FileEmbedd
 	}
 	var embeddings []FileEmbedding
 	for _, file := range files {
-		// Loop to handle errors against empty files
-		for _, file := range files {
-			if len(file.Content) == 0 {
-				fmt.Printf("Skipping current file %s\n", file.Path)
-				continue
-			}
+		if len(file.Content) == 0 {
+			fmt.Printf("Skipping empty file: %s\n", file.Path)
+			continue
 		}
 
 		fmt.Println("Processing file:", file.Path)
 
-		// Wrap the file content for Vertex AI gRPC request
 		instance, err := structpb.NewStruct(map[string]interface{}{
 			"content": file.Content,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("failed to create struct for %s: %w", file.Path, err)
+			fmt.Printf("Warning: failed to create struct for %s: %v\n", file.Path, err)
+			continue
 		}
 
-		// Create PredictRequest to call the embedding model
 		request := &aiplatformpb.PredictRequest{
 			Endpoint:  e.ModelEndpoint,
 			Instances: []*structpb.Value{structpb.NewStructValue(instance)},
@@ -133,45 +144,43 @@ func (e *Embedder) EmbedDirectory(dir string, extensions []string) ([]FileEmbedd
 
 		resp, err := e.Client.Predict(e.Ctx, request)
 		if err != nil {
-			fmt.Printf("prediction failed for %s: %w", file.Path, err)
+			fmt.Printf("Warning: prediction failed for %s: %v\n", file.Path, err)
 			continue
-
 		}
-		// Check that the response has predictions
+		// Check if the embedding model generated a response
 		if len(resp.Predictions) == 0 {
-			fmt.Printf("no predictions returned for %s", file.Path)
+			fmt.Printf("Warning: no predictions returned for %s\n", file.Path)
 			continue
 		}
+		// Get the first prediction (one file at the time = one prediction per file)
 		predStruct := resp.Predictions[0].GetStructValue()
 		if predStruct == nil {
-			fmt.Printf("prediction is not a struct for %s", file.Path)
+			fmt.Printf("Warning: prediction is not a struct for %s\n", file.Path)
 			continue
 		}
-		// Extract the "embedding" field
+		// Extract embedding field
 		embeddingField, ok := predStruct.Fields["embedding"]
 		if !ok {
-			fmt.Printf("embedding field missing in prediction for %s", file.Path)
+			fmt.Printf("Warning: embedding field missing for %s\n", file.Path)
 			continue
 		}
 
 		listValue := embeddingField.GetListValue()
 		if listValue == nil {
-			fmt.Printf("embedding field is not a list for %s", file.Path)
+			fmt.Printf("Warning: embedding field is not a list for %s\n", file.Path)
 			continue
 		}
 		// Convert embedding to slice of type float32
 		embedding := make([]float32, len(listValue.Values))
 		for i, v := range listValue.Values {
-			number := v.GetNumberValue()
-			embedding[i] = float32(number)
+			embedding[i] = float32(v.GetNumberValue())
 		}
-		// Append the embedding to the result slice
+
 		embeddings = append(embeddings, FileEmbedding{
 			Path:      file.Path,
 			Content:   file.Content,
 			Embedding: embedding,
 		})
-
 	}
 	return embeddings, nil
 }
