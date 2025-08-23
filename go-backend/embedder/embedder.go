@@ -45,7 +45,7 @@ func EmbedderClient(ctx context.Context, credsFile string, rdb *redis.Client, mo
 	// Load in necessary ID's for embedding model initialization
 	projectID := os.Getenv("GCP_PROJECT_ID")
 	location := os.Getenv("GCP_LOCATION")
-	model := "textembedding-gecko@003"
+	model := "gemini-embedding-001"
 
 	endpoint := fmt.Sprintf(
 		"projects/%s/locations/%s/publishers/google/models/%s",
@@ -107,6 +107,14 @@ func (e *Embedder) EmbedDirectory(dir string, extensions []string) ([]FileEmbedd
 	}
 	var embeddings []FileEmbedding
 	for _, file := range files {
+		// Loop to handle errors against empty files
+		for _, file := range files {
+			if len(file.Content) == 0 {
+				fmt.Printf("Skipping current file %s\n", file.Path)
+				continue
+			}
+		}
+
 		fmt.Println("Processing file:", file.Path)
 
 		// Wrap the file content for Vertex AI gRPC request
@@ -116,6 +124,7 @@ func (e *Embedder) EmbedDirectory(dir string, extensions []string) ([]FileEmbedd
 		if err != nil {
 			return nil, fmt.Errorf("failed to create struct for %s: %w", file.Path, err)
 		}
+
 		// Create PredictRequest to call the embedding model
 		request := &aiplatformpb.PredictRequest{
 			Endpoint:  e.ModelEndpoint,
@@ -124,26 +133,31 @@ func (e *Embedder) EmbedDirectory(dir string, extensions []string) ([]FileEmbedd
 
 		resp, err := e.Client.Predict(e.Ctx, request)
 		if err != nil {
-			return nil, fmt.Errorf("prediction failed for %s: %w", file.Path, err)
+			fmt.Printf("prediction failed for %s: %w", file.Path, err)
+			continue
+
 		}
 		// Check that the response has predictions
 		if len(resp.Predictions) == 0 {
-			return nil, fmt.Errorf("no predictions returned for %s", file.Path)
+			fmt.Printf("no predictions returned for %s", file.Path)
+			continue
 		}
-
 		predStruct := resp.Predictions[0].GetStructValue()
 		if predStruct == nil {
-			return nil, fmt.Errorf("prediction is not a struct for %s", file.Path)
+			fmt.Printf("prediction is not a struct for %s", file.Path)
+			continue
 		}
 		// Extract the "embedding" field
 		embeddingField, ok := predStruct.Fields["embedding"]
 		if !ok {
-			return nil, fmt.Errorf("embedding field missing in prediction for %s", file.Path)
+			fmt.Printf("embedding field missing in prediction for %s", file.Path)
+			continue
 		}
 
 		listValue := embeddingField.GetListValue()
 		if listValue == nil {
-			return nil, fmt.Errorf("embedding field is not a list for %s", file.Path)
+			fmt.Printf("embedding field is not a list for %s", file.Path)
+			continue
 		}
 		// Convert embedding to slice of type float32
 		embedding := make([]float32, len(listValue.Values))
