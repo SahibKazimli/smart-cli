@@ -11,7 +11,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 type FileEmbedding struct {
@@ -61,6 +60,28 @@ func EmbedderClient(ctx context.Context, credsFile string, rdb *redis.Client, mo
 	}, nil
 }
 
+func shouldSkipDir(name string) bool {
+	// A helper to decide whether a dir should be skipped for processing
+	skipDirs := map[string]struct{}{
+		"venv": {}, "__pycache__": {}, "node_modules": {}, ".git": {},
+	}
+	_, skip := skipDirs[name]
+	return skip
+}
+
+func isAllowedExtension(path string) bool {
+	// A helper to decide whether an extension is allowed,
+	// thus allowing processing
+	allowed := []string{".go", ".py", ".js", ".cpp", ".txt"}
+	ext := filepath.Ext(path)
+	for _, i := range allowed {
+		if ext == i {
+			return true
+		}
+	}
+	return false
+}
+
 // ReadDirectory Will walk through the current directory to read in content
 func ReadDirectory(dir string, extensions []string) (files []FileData, err error) {
 	// Recursively walks the directory tree starting at dir
@@ -70,26 +91,12 @@ func ReadDirectory(dir string, extensions []string) (files []FileData, err error
 		if err != nil {
 			return err
 		}
-		if d.IsDir() {
-			return nil
+		// Handle dirs
+		if d.IsDir() && shouldSkipDir(d.Name()) {
+			return filepath.SkipDir
 		}
-		// filter by extension and folder names
-		skipDirs := map[string]struct{}{
-			"venv": {}, "__pycache__": {}, "node_modules": {}, ".git": {},
-		}
-		// And check all ancestor directories to skip dependencies
-		parts := strings.Split(path, string(os.PathSeparator))
-		for _, part := range parts {
-			if _, skip := skipDirs[part]; skip {
-				if d.IsDir() {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-		}
-
-		ext := filepath.Ext(path)
-		if ext == ".go" || ext == ".py" || ext == ".js" || ext == ".cpp" || ext == ".txt" {
+		// Handle files
+		if !d.IsDir() && isAllowedExtension(path) {
 			// process file
 			ctn, err := os.ReadFile(path)
 			if err != nil {
@@ -103,6 +110,7 @@ func ReadDirectory(dir string, extensions []string) (files []FileData, err error
 		}
 		return nil
 	})
+
 	if newErr != nil {
 		return nil, newErr
 	}
