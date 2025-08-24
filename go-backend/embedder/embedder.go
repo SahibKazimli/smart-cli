@@ -112,7 +112,7 @@ func parsePrediction(pred *structpb.Value) ([]float32, error) {
 	return embedding, nil
 }
 
-func (e *Embedder) embedQuery(userInput string) ([]float32, error) {
+func (e *Embedder) EmbedQuery(userInput string) ([]float32, error) {
 	// A function that will embed the query from the user
 	instance, err := structpb.NewStruct(map[string]interface{}{
 		"content": userInput,
