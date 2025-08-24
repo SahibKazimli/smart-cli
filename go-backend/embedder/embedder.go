@@ -82,8 +82,38 @@ func isAllowedExtension(path string) bool {
 	return false
 }
 
+func parsePrediction(pred *structpb.Value) ([]float32, error) {
+	// A helper to parse the prediction produced by the embedding model
+	// Try to parse the prediction as a list, checking for embeddings.values
+	structVal := pred.GetStructValue()
+	if structVal == nil {
+		return nil, fmt.Errorf("Warning: Prediction is not a struct\n")
+	}
+	embeddingsVal, ok := structVal.Fields["embeddings"]
+	if !ok {
+		return nil, fmt.Errorf("Warning: Embeddings field missing\n")
+	}
+	embeddingsStruct := embeddingsVal.GetStructValue()
+	if embeddingsStruct == nil {
+		return nil, fmt.Errorf("Warning: Embeddings not a struct\n")
+	}
+	valuesField, ok := embeddingsStruct.Fields["values"]
+	if !ok {
+		return nil, fmt.Errorf("Warning: Values field missing\n")
+	}
+	listValue := valuesField.GetListValue()
+	if listValue == nil {
+		return nil, fmt.Errorf("Warning: Values field is not a list\n")
+	}
+	embedding := make([]float32, len(listValue.Values))
+	for idx, val := range listValue.Values {
+		embedding[idx] = float32(val.GetNumberValue())
+	}
+	return embedding, nil
+}
+
 // ReadDirectory Will walk through the current directory to read in content
-func ReadDirectory(dir string, extensions []string) (files []FileData, err error) {
+func ReadDirectory(dir string) (files []FileData, err error) {
 	// Recursively walks the directory tree starting at dir
 	// Filters by given extensions
 	// Returns a slice of FileData structs containing file paths and content
@@ -124,7 +154,7 @@ func (e *Embedder) EmbedDirectory(dir string, extensions []string) ([]FileEmbedd
 		Parses the predictions response to get the vector.
 	*/
 
-	files, err := ReadDirectory(dir, extensions)
+	files, err := ReadDirectory(dir)
 	if err != nil {
 		return nil, err
 	}
@@ -134,9 +164,7 @@ func (e *Embedder) EmbedDirectory(dir string, extensions []string) ([]FileEmbedd
 			fmt.Printf("Skipping empty file: %s\n", file.Path)
 			continue
 		}
-
 		fmt.Println("Processing file:", file.Path)
-
 		instance, err := structpb.NewStruct(map[string]interface{}{
 			"content": file.Content,
 		})
@@ -160,26 +188,10 @@ func (e *Embedder) EmbedDirectory(dir string, extensions []string) ([]FileEmbedd
 			fmt.Printf("Warning: no predictions returned for %s\n", file.Path)
 			continue
 		}
-		// Try to parse the prediction as a list, checking for embeddings.values
-		var listValue *structpb.ListValue
-		structVal := resp.Predictions[0].GetStructValue()
-		if structVal != nil {
-			if embeddingsVal, ok := structVal.Fields["embeddings"]; ok {
-				if embeddingsStruct := embeddingsVal.GetStructValue(); embeddingsStruct != nil {
-					if vlist, ok := embeddingsStruct.Fields["values"]; ok {
-						listValue = vlist.GetListValue()
-					}
-				}
-			}
-		}
-		if listValue == nil {
-			fmt.Printf("Warning: prediction could not be parsed as embedding for %s\n", file.Path)
+		embedding, err := parsePrediction(resp.Predictions[0])
+		if err != nil {
+			fmt.Printf("Warning: %v for %s\n", err, file.Path)
 			continue
-		}
-		// Convert embedding to slice of type float32
-		embedding := make([]float32, len(listValue.Values))
-		for i, v := range listValue.Values {
-			embedding[i] = float32(v.GetNumberValue())
 		}
 
 		embeddings = append(embeddings, FileEmbedding{
