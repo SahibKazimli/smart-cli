@@ -112,6 +112,34 @@ func parsePrediction(pred *structpb.Value) ([]float32, error) {
 	return embedding, nil
 }
 
+func (e *Embedder) embedQuery(userInput string) ([]float32, error) {
+	// A function that will embed the query from the user
+	instance, err := structpb.NewStruct(map[string]interface{}{
+		"content": userInput,
+	})
+	if err != nil {
+		return nil, err
+	}
+	queryRequest := &aiplatformpb.PredictRequest{
+		Endpoint:  e.ModelEndpoint,
+		Instances: []*structpb.Value{structpb.NewStructValue(instance)},
+	}
+	// Call the Vertex AI API, get response from model
+	resp, err := e.Client.Predict(e.Ctx, queryRequest)
+	if err != nil {
+		return nil, fmt.Errorf("Warning: Could not create struct\n")
+	}
+	// Check if resp is empty
+	if len(resp.Predictions) == 0 {
+		return nil, fmt.Errorf("Warning: Empty query does not generate response\n")
+	}
+	queryEmbedding, err := parsePrediction(resp.Predictions[0])
+	if err != nil {
+		return nil, fmt.Errorf("Warning")
+	}
+	return queryEmbedding, nil
+}
+
 // ReadDirectory Will walk through the current directory to read in content
 func ReadDirectory(dir string) (files []FileData, err error) {
 	// Recursively walks the directory tree starting at dir
