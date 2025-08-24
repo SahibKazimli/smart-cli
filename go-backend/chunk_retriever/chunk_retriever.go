@@ -1,11 +1,11 @@
 package chunk_retriever
 
 import (
-	//"cloud.google.com/go/vertexai/genai"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"github.com/redis/go-redis/v9"
-	//"google.golang.org/api/option"
+	"math"
 	"os"
 	"path/filepath"
 )
@@ -87,19 +87,26 @@ func GetIndexName(rdb *redis.Client) (string, error) {
 	return indexes[0], nil
 }
 
-func RetrieveChunks(rdb *redis.Client, query ChunkQuery) ([]Chunk, error) {
+// RetrieveChunks searches Redis for the top K most similar chunks to the given query.
+// It uses vector similarity search (KNN) and returns a slice of Chunk structs.
+func RetrieveChunks(rdb *redis.Client, query ChunkQuery, queryEmbedding []float32) ([]Chunk, error) {
 	ctx := context.Background()
-	// Starting with a simple search method with just text
-	// Will sort by vector similarity
-	// FT.SEARCH
+	// We need to convert the embedded query to a format redis understands
+	embeddedQueryByte := make([]byte, 4*len(queryEmbedding))
+	for idx, val := range queryEmbedding {
+		binary.LittleEndian.PutUint32(embeddedQueryByte[idx*4:], math.Float32bits(val))
+	}
+	// Construct Redis search arguments for KNN
 	args := []interface{}{
 		"FT.SEARCH",
 		query.IndexName,
-		"*", // match everything
-		"RETURN", "2", "text", "metadata",
+		fmt.Sprintf("*=>[KNN %d @embedding $vec AS score]", query.TopK),
+		"PARAMS", "1", "vec", embeddedQueryByte,
+		"RETURN", "3", "text", "metadata", "score",
+		"SORTBY", "score",
 		"LIMIT", "0", query.TopK,
 	}
-
+	// Execute the search
 	res, err := rdb.Do(ctx, args...).Result()
 	if err != nil {
 		return nil, err
@@ -118,7 +125,7 @@ func RetrieveChunks(rdb *redis.Client, query ChunkQuery) ([]Chunk, error) {
 		fields, _ := arr[i+1].([]interface{})
 		ch := Chunk{Metadata: map[string]string{}}
 
-		// Iterate over the key-value pairs for this result
+		// Convert each key-value pair to string and populate Chunk struct
 		for j := 0; j < len(fields); j += 2 {
 			var key string
 			switch k := fields[j].(type) {
