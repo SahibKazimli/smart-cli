@@ -160,22 +160,20 @@ func (e *Embedder) EmbedDirectory(dir string, extensions []string) ([]FileEmbedd
 			fmt.Printf("Warning: no predictions returned for %s\n", file.Path)
 			continue
 		}
-		// Get the first prediction (one file at the time = one prediction per file)
-		predStruct := resp.Predictions[0].GetStructValue()
-		if predStruct == nil {
-			fmt.Printf("Warning: prediction is not a struct for %s\n", file.Path)
-			continue
+		// Try to parse the prediction as a list, checking for embeddings.values
+		var listValue *structpb.ListValue
+		structVal := resp.Predictions[0].GetStructValue()
+		if structVal != nil {
+			if embeddingsVal, ok := structVal.Fields["embeddings"]; ok {
+				if embeddingsStruct := embeddingsVal.GetStructValue(); embeddingsStruct != nil {
+					if vlist, ok := embeddingsStruct.Fields["values"]; ok {
+						listValue = vlist.GetListValue()
+					}
+				}
+			}
 		}
-		// Extract embedding field
-		embeddingField, ok := predStruct.Fields["embedding"]
-		if !ok {
-			fmt.Printf("Warning: embedding field missing for %s\n", file.Path)
-			continue
-		}
-
-		listValue := embeddingField.GetListValue()
 		if listValue == nil {
-			fmt.Printf("Warning: embedding field is not a list for %s\n", file.Path)
+			fmt.Printf("Warning: prediction could not be parsed as embedding for %s\n", file.Path)
 			continue
 		}
 		// Convert embedding to slice of type float32
