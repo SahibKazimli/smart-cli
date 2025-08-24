@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"github.com/redis/go-redis/v9"
 	"math"
 	"os"
 	"path/filepath"
+
+	"github.com/redis/go-redis/v9"
 )
 
 type Chunk struct {
@@ -96,15 +97,17 @@ func RetrieveChunks(rdb *redis.Client, query ChunkQuery, queryEmbedding []float3
 	for idx, val := range queryEmbedding {
 		binary.LittleEndian.PutUint32(embeddedQueryByte[idx*4:], math.Float32bits(val))
 	}
-	// Construct Redis search arguments for KNN
+	// Construct Redis search arguments for KNN using correct FT.SEARCH query format
+	// Example: FT.SEARCH myindex "(*=>[KNN 10 @embedding $vec AS score])" PARAMS 2 vec $BLOB RETURN 3 text metadata score SORTBY score LIMIT 0 10 DIALECT 2
 	args := []interface{}{
 		"FT.SEARCH",
 		query.IndexName,
 		fmt.Sprintf("*=>[KNN %d @embedding $vec AS score]", query.TopK),
-		"PARAMS", "1", "vec", embeddedQueryByte,
-		"RETURN", "3", "text", "metadata", "score",
+		"PARAMS", "2", "vec", embeddedQueryByte,
 		"SORTBY", "score",
+		"RETURN", "2", "text", "score",
 		"LIMIT", "0", query.TopK,
+		"DIALECT", "2",
 	}
 	// Execute the search
 	res, err := rdb.Do(ctx, args...).Result()

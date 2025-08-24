@@ -135,7 +135,7 @@ func (e *Embedder) EmbedQuery(userInput string) ([]float32, error) {
 	}
 	queryEmbedding, err := parsePrediction(resp.Predictions[0])
 	if err != nil {
-		return nil, fmt.Errorf("Warning")
+		return nil, fmt.Errorf("Warning\n")
 	}
 	return queryEmbedding, nil
 }
