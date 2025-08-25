@@ -1,16 +1,17 @@
 package embedder
 
 import (
-	aiplatform "cloud.google.com/go/aiplatform/apiv1"
-	"cloud.google.com/go/aiplatform/apiv1/aiplatformpb"
 	"context"
 	"fmt"
-	"github.com/redis/go-redis/v9"
-	"google.golang.org/api/option"
-	"google.golang.org/protobuf/types/known/structpb"
 	"io/fs"
 	"os"
 	"path/filepath"
+
+	aiplatform "cloud.google.com/go/aiplatform/apiv1"
+	"cloud.google.com/go/aiplatform/apiv1/aiplatformpb"
+	"github.com/redis/go-redis/v9"
+	"google.golang.org/api/option"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type FileEmbedding struct {
@@ -87,23 +88,23 @@ func parsePrediction(pred *structpb.Value) ([]float32, error) {
 	// Try to parse the prediction as a list, checking for embeddings.values
 	structVal := pred.GetStructValue()
 	if structVal == nil {
-		return nil, fmt.Errorf("Warning: Prediction is not a struct\n")
+		return nil, fmt.Errorf("warning prediction is not a struct")
 	}
 	embeddingsVal, ok := structVal.Fields["embeddings"]
 	if !ok {
-		return nil, fmt.Errorf("Warning: Embeddings field missing\n")
+		return nil, fmt.Errorf("embeddings field missing")
 	}
 	embeddingsStruct := embeddingsVal.GetStructValue()
 	if embeddingsStruct == nil {
-		return nil, fmt.Errorf("Warning: Embeddings not a struct\n")
+		return nil, fmt.Errorf("warning: embeddings not a struct")
 	}
 	valuesField, ok := embeddingsStruct.Fields["values"]
 	if !ok {
-		return nil, fmt.Errorf("Warning: Values field missing\n")
+		return nil, fmt.Errorf("values field missing")
 	}
 	listValue := valuesField.GetListValue()
 	if listValue == nil {
-		return nil, fmt.Errorf("Warning: Values field is not a list\n")
+		return nil, fmt.Errorf("values field is not a list")
 	}
 	embedding := make([]float32, len(listValue.Values))
 	for idx, val := range listValue.Values {
@@ -127,15 +128,15 @@ func (e *Embedder) EmbedQuery(userInput string) ([]float32, error) {
 	// Call the Vertex AI API, get response from model
 	resp, err := e.Client.Predict(e.Ctx, queryRequest)
 	if err != nil {
-		return nil, fmt.Errorf("Warning: Could not create struct\n")
+		return nil, fmt.Errorf("warning could not create struct")
 	}
 	// Check if resp is empty
 	if len(resp.Predictions) == 0 {
-		return nil, fmt.Errorf("Warning: Empty query does not generate response\n")
+		return nil, fmt.Errorf("warning: empty query does not generate response")
 	}
 	queryEmbedding, err := parsePrediction(resp.Predictions[0])
 	if err != nil {
-		return nil, fmt.Errorf("Warning\n")
+		return nil, fmt.Errorf("warning")
 	}
 	return queryEmbedding, nil
 }
