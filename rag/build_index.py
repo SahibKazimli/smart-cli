@@ -23,7 +23,7 @@ embeddingModel = VertexAIEmbeddings(model_name="gemini-embedding-001")
 
 
 class CodeIngestor:
-    def __init__(self, chunkSize=300, chunkOverlap=20):
+    def __init__(self, chunkSize=400, chunkOverlap=200):
         self.embeddingModel = embeddingModel
         self.textSplitter = CharacterTextSplitter(
             separator="\n",
