@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -14,7 +15,8 @@ import (
 type Chunk struct {
 	Text     string
 	Metadata map[string]string
-	Score    float64
+	// Score is the vector distance (COSINE). Lower = more similar.
+	Score float64
 }
 
 type ChunkQuery struct {
@@ -25,16 +27,18 @@ type ChunkQuery struct {
 
 func Connect() *redis.Client {
 	ctx := context.Background()
-	// Connecting to the redis database
-	rdb := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
-	})
-
-	pong, err := rdb.Ping(ctx).Result()
-	if err != nil {
-		panic(err)
+	addr := "localhost:6379"
+	if v := os.Getenv("REDIS_ADDR"); v != "" {
+		addr = v
 	}
-	fmt.Println("Redis ping:", pong)
+	rdb := redis.NewClient(&redis.Options{
+		Addr: addr,
+		// If you want to force RESP3 consistently, uncomment:
+		// Protocol: 3,
+	})
+	if _, err := rdb.Ping(ctx).Result(); err != nil {
+		panic(fmt.Errorf("failed to connect to redis at %s: %w", addr, err))
+	}
 	return rdb
 }
 
@@ -52,115 +56,133 @@ func getIndexes(rdb *redis.Client) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	var indexes []string
-	for _, v := range res.([]interface{}) {
-		indexes = append(indexes, fmt.Sprintf("%s", v))
+	raw, ok := res.([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("unexpected FT._LIST response type %T", res)
+	}
+	indexes := make([]string, 0, len(raw))
+	for _, v := range raw {
+		switch s := v.(type) {
+		case string:
+			indexes = append(indexes, s)
+		case []byte:
+			indexes = append(indexes, string(s))
+		default:
+			indexes = append(indexes, fmt.Sprintf("%v", v))
+		}
 	}
 	return indexes, nil
 }
 
 func GetIndexName(rdb *redis.Client) (string, error) {
-	// Get all Redis indexes
 	indexes, err := getIndexes(rdb)
 	if err != nil {
 		return "", err
 	}
-
 	if len(indexes) == 0 {
 		return "", fmt.Errorf("no indexes found in Redis")
 	}
-
-	// Get the current folder name
 	cwd, err := os.Getwd()
 	if err != nil {
 		return "", err
 	}
 	folderName := filepath.Base(cwd)
-
-	// Try to find an index that matches the folder
+	want := folderName + "_index"
 	for _, idx := range indexes {
-		if idx == folderName+"_index" {
+		if idx == want {
 			return idx, nil
 		}
 	}
-
-	// Fallback: return the first available index
 	return indexes[0], nil
 }
 
-// RetrieveChunks searches Redis for the top K most similar chunks to the given query.
-// It uses vector similarity search (KNN) and returns a slice of Chunk structs.
+func float32SliceToLEBytes(vec []float32) []byte {
+	buf := make([]byte, 4*len(vec))
+	for i, v := range vec {
+		binary.LittleEndian.PutUint32(buf[i*4:], math.Float32bits(v))
+	}
+	return buf
+}
+
 func RetrieveChunks(rdb *redis.Client, query ChunkQuery, queryEmbedding []float32) ([]Chunk, error) {
 	ctx := context.Background()
-	// We need to convert the embedded query to a format redis understands
-	embeddedQueryByte := make([]byte, 4*len(queryEmbedding))
-	for idx, val := range queryEmbedding {
-		binary.LittleEndian.PutUint32(embeddedQueryByte[idx*4:], math.Float32bits(val))
-	}
-	// Construct Redis search arguments for KNN using correct FT.SEARCH query format
-	// Example: FT.SEARCH myindex "(*=>[KNN 10 @embedding $vec AS score])" PARAMS 2 vec $BLOB RETURN 3 text metadata score SORTBY score LIMIT 0 10 DIALECT 2
-	args := []interface{}{
+	vec := float32SliceToLEBytes(queryEmbedding)
+
+	res, err := rdb.Do(
+		ctx,
 		"FT.SEARCH",
 		query.IndexName,
-		fmt.Sprintf("*=>[KNN %d @embedding $vec AS score]", query.TopK),
-		"PARAMS", "2", "vec", embeddedQueryByte,
-		"SORTBY", "score",
-		"RETURN", "2", "text", "score",
-		"LIMIT", "0", query.TopK,
-		"DIALECT", "2",
-	}
-	// Execute the search
-	res, err := rdb.Do(ctx, args...).Result()
+		fmt.Sprintf("*=>[KNN %d @embedding $vec AS vector_score]", query.TopK),
+		"PARAMS", 2, "vec", vec,
+		"SORTBY", "vector_score",
+		"RETURN", 2, "text", "vector_score",
+		"LIMIT", 0, query.TopK,
+		"DIALECT", 2,
+	).Result()
 	if err != nil {
 		return nil, err
 	}
-	results := []Chunk{}
+	return parseSearchResults(res)
+}
 
-	// Parsing reply
-	arr, ok := res.([]interface{})
-	if !ok || len(arr) < 2 {
-		return results, nil
-	}
+func parseSearchResults(res any) ([]Chunk, error) {
+	out := []Chunk{}
 
-	// Iterate over the search results returned by Redis
-	// Skip the first element since it's the total count of matches
-	for i := 1; i < len(arr); i += 2 {
-		fields, _ := arr[i+1].([]interface{})
-		ch := Chunk{Metadata: map[string]string{}}
-
-		// Convert each key-value pair to string and populate Chunk struct
-		for j := 0; j < len(fields); j += 2 {
-			var key string
-			switch k := fields[j].(type) {
-			case []byte:
-				key = string(k)
-			case string:
-				key = k
-			default:
-				key = fmt.Sprintf("%v", k)
-			}
-
-			val := fields[j+1]
-			var valStr string
-			switch v := val.(type) {
-			case []byte:
-				valStr = string(v)
-			case string:
-				valStr = v
-			default:
-				valStr = fmt.Sprintf("%v", v)
-			}
-
-			// Assign text to the Text field, everything else goes into Metadata
-			switch key {
-			case "text":
-				ch.Text = valStr
-			default:
-				ch.Metadata[key] = valStr
-			}
+	// RESP3: Redis Stack may return a map with "results".
+	if m, ok := res.(map[interface{}]interface{}); ok {
+		resultsAny := getMapVal(m, "results")
+		resultsArr, ok := resultsAny.([]interface{})
+		if !ok {
+			return out, nil
 		}
-		results = append(results, ch)
+		for _, item := range resultsArr {
+			itMap, ok := item.(map[interface{}]interface{})
+			if !ok {
+				continue
+			}
+			extraAny := getMapVal(itMap, "extra_attributes")
+			extra, ok := extraAny.(map[interface{}]interface{})
+			if !ok {
+				continue
+			}
+			ch := Chunk{Metadata: map[string]string{}}
+			for k, v := range extra {
+				ks := toString(k)
+				vs := toString(v)
+				switch ks {
+				case "text":
+					ch.Text = vs
+				case "vector_score":
+					if f, err := strconv.ParseFloat(vs, 64); err == nil {
+						ch.Score = f
+					}
+				default:
+					ch.Metadata[ks] = vs
+				}
+			}
+			out = append(out, ch)
+		}
+		return out, nil
 	}
+	return out, fmt.Errorf("unexpected FT.SEARCH response type: %T", res)
+}
 
-	return results, nil
+func getMapVal(m map[interface{}]interface{}, key string) any {
+	for k, v := range m {
+		if toString(k) == key {
+			return v
+		}
+	}
+	return nil
+}
+
+func toString(v any) string {
+	switch t := v.(type) {
+	case string:
+		return t
+	case []byte:
+		return string(t)
+	default:
+		return fmt.Sprintf("%v", t)
+	}
 }
