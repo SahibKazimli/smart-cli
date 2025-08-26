@@ -103,5 +103,19 @@ func buildContext(chunks []chunk_retriever.Chunk) string {
 // Helper: prompt assembly
 func assemblePrompt(system, query, ctxText string, requireCites bool) string {
 	// combine system + user + context + rules
-	return ""
+	var builder strings.Builder
+	// System prompt check
+	if system != "" {
+		builder.WriteString(system)
+		builder.WriteString("\n\n")
+	}
+	builder.WriteString("Context:\n")
+	builder.WriteString(ctxText)
+	builder.WriteString("\n\nUser question:\n")
+	builder.WriteString(query)
+	builder.WriteString("\n\nInstructions:\n")
+	builder.WriteString("- Use only the Context above; do not invent details.\n")
+	builder.WriteString("- If the context is insufficient, say so briefly.\n")
+	builder.WriteString("- Prefer precise, concise answers; include code when useful.\n")
+	return builder.String()
 }
