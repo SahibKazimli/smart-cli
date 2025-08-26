@@ -2,55 +2,116 @@ package generator
 
 import (
 	"context"
-	"fmt"
-	"smart-cli/go-backend/chunk_retriever"
 	"sort"
 	"strings"
-	"time"
+
+	"smart-cli/go-backend/chunk_retriever"
+
+	"cloud.google.com/go/vertexai/genai"
 )
 
+const SystemPrompt = `
+You are an AI assistant integrated into a command-line interface.
+Explain things in plain text, without Markdown or special formatting.
+Your job is to:
+- Review code snippets and highlight potential errors.
+- Explain errors in clear, concise language.
+- Suggest fixes or improvements.
+- Optionally provide system or command-line suggestions.
+
+Response format:
+- Keep explanations short and actionable.
+- Avoid unnecessary verbosity.
+- Use plain text or simple structured output.
+
+Constraints:
+- Maximum 700 tokens.
+- Be precise and relevant to the input provided.
+- Output must be plain text only. Do not use Markdown.
+`
+
 type Generator struct {
-	// llm client (e.g., Vertex AI) goes here
 	projectID string
 	location  string
 	modelName string
+
+	// LLM client and model for generation
+	client *genai.Client
+	model  *genai.GenerativeModel
 }
 
 func NewAgent(ctx context.Context, projectID, location, modelName string) (*Generator, error) {
-	// init LLM client
+	// Initialize Vertex AI Generative client and model
+	client, err := genai.NewClient(ctx, projectID, location)
+	if err != nil {
+		return nil, err
+	}
+	m := client.GenerativeModel(modelName)
+	// Configure generation params; enforce your token/style constraints
+	temp := float32(0.2)
+	topP := float32(0.9)
+	topK := int32(32)
+	maxTokens := int32(700)
+
+	m.GenerationConfig = genai.GenerationConfig{
+		Temperature:     &temp,
+		TopP:            &topP,
+		TopK:            &topK,
+		MaxOutputTokens: &maxTokens,
+	}
+	// Set a stable system instruction matching your constraints
+	m.SystemInstruction = &genai.Content{
+		Parts: []genai.Part{genai.Text(SystemPrompt)},
+	}
+
 	return &Generator{
 		projectID: projectID,
 		location:  location,
 		modelName: modelName,
+		client:    client,
+		model:     m,
 	}, nil
 }
 
 func (g *Generator) Close() error {
-	// close client if needed
+	if g != nil && g.client != nil {
+		return g.client.Close()
+	}
 	return nil
 }
 
 func (g *Generator) Answer(ctx context.Context, query string, chunks []chunk_retriever.Chunk) (string, error) {
-	// 1) select/rerank
-	// 2) budget
-	// 3) build context (ctxText, citeMap)
-	// 4) assemble prompt
-	// 5) call LLM (non-streaming)
-	// 6) post-process + map citations
-	// 7) return
-	return "...answer...", nil
-}
+	// Build retrieved context and assemble the prompt
+	ctxText := buildContext(chunks)
+	prompt := assemblePrompt(SystemPrompt, query, ctxText)
 
-func (g *Generator) StreamAnswer(ctx context.Context, query string, chunks []chunk_retriever.Chunk, onToken func(string)) (string, error) {
-	// same as Answer but streaming
-	// call onToken as tokens arrive, build final buffer
-	return "...final...", nil
-}
+	// Require a configured model
+	if g == nil || g.model == nil {
+		// Fallback: return the prompt preview if model not initialized
+		return prompt, nil
+	}
 
-// Helper: optional rerank hook (no-op initial)
-func maybeRerank(ctx context.Context, query string, chunks []chunk_retriever.Chunk, use bool) []chunk_retriever.Chunk {
-	// if use { call external reranker } else { return chunks }
-	return chunks
+	// Call the model
+	resp, err := g.model.GenerateContent(ctx, genai.Text(prompt))
+	if err != nil {
+		return "", err
+	}
+
+	// Extract plain text from candidates
+	var out strings.Builder
+	if resp != nil {
+		for _, c := range resp.Candidates {
+			if c == nil || c.Content == nil {
+				continue
+			}
+			for _, p := range c.Content.Parts {
+				if t, ok := p.(genai.Text); ok {
+					out.WriteString(string(t))
+				}
+			}
+		}
+	}
+	return strings.TrimSpace(out.String()), nil
 }
 
 // Helper: budget fit
@@ -59,7 +120,7 @@ func fitToBudget(chunks []chunk_retriever.Chunk, max int) []chunk_retriever.Chun
 	return chunks
 }
 
-// Helper: build context and citation map
+// Helper: build context (no headers; blank-line separators)
 func buildContext(chunks []chunk_retriever.Chunk) string {
 	const charBudget = 10000
 	if len(chunks) == 0 {
@@ -101,10 +162,9 @@ func buildContext(chunks []chunk_retriever.Chunk) string {
 }
 
 // Helper: prompt assembly
-func assemblePrompt(system, query, ctxText string, requireCites bool) string {
-	// combine system + user + context + rules
+func assemblePrompt(system, query, ctxText string) string {
 	var builder strings.Builder
-	// System prompt check
+	// System prompt included up front for non-system-aware callers
 	if system != "" {
 		builder.WriteString(system)
 		builder.WriteString("\n\n")
