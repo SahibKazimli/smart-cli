@@ -117,6 +117,9 @@ func (g *Generator) Answer(ctx context.Context, query string, chunks []chunk_ret
 // Helper: budget fit
 func fitToBudget(chunks []chunk_retriever.Chunk, max int) []chunk_retriever.Chunk {
 	// estimate per-chunk size and include until limit
+	if len(chunks) > max {
+		return len(chunks) - max // pseudo code to placehold
+	}
 	return chunks
 }
 
