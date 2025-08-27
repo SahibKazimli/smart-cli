@@ -19,7 +19,7 @@ init(
     location="us-central1"
 )
 
-embeddingModel = VertexAIEmbeddings(model_name="gemini-embedding-001")
+embeddingModel = VertexAIEmbeddings(model_name="textembedding-gecko")
 
 
 class CodeIngestor:

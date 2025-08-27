@@ -46,7 +46,7 @@ func EmbedderClient(ctx context.Context, credsFile string, rdb *redis.Client, mo
 	// Load in necessary ID's for embedding model initialization
 	projectID := os.Getenv("GCP_PROJECT_ID")
 	location := os.Getenv("GCP_LOCATION")
-	model := "gemini-embedding-001"
+	model := "textembedding-gecko"
 
 	endpoint := fmt.Sprintf(
 		"projects/%s/locations/%s/publishers/google/models/%s",
