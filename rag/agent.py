@@ -23,7 +23,7 @@ init(
 )
 
 modelName = "gemini-2.5-pro"
-embeddingModel = VertexAIEmbeddings(model_name="textembedding-gecko")
+embeddingModel = VertexAIEmbeddings(model_name="text-embedding-005")
 
 
 instructLLM = ChatVertexAI(

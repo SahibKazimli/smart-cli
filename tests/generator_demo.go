@@ -3,74 +3,93 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/joho/godotenv"
 	"log"
 	"os"
+	"strings"
 
+	"github.com/joho/godotenv"
 	"smart-cli/go-backend/chunk_retriever"
 	"smart-cli/go-backend/embedder"
 	"smart-cli/go-backend/generator"
 )
 
 func main() {
-	// 1. Load environment variables
+	// Load environment variables
 	err := godotenv.Load("/Users/sahibkazimli/go-projects/smart-cli/.env")
 	if err != nil {
 		log.Println("⚠️  Could not load .env file, relying on system environment")
 	}
 	projectID := os.Getenv("GCP_PROJECT_ID")
 	location := os.Getenv("GCP_LOCATION")
-	modelName := "gemini-embedding-001" // or your LLM model
+	embeddingModel := "text-embedding-005"
+	generationModel := "gemini-2.5-pro"
 	creds := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
 
 	if projectID == "" || location == "" || creds == "" {
 		log.Fatal("Please set GCP_PROJECT_ID, GCP_LOCATION, and GOOGLE_APPLICATION_CREDENTIALS")
 	}
 
-	// 2. Connect to Redis
+	// Connect to Redis
 	rdb := chunk_retriever.Connect()
 
-	// 3. Initialize the LLM agent
+	// Initialize LLM agent
 	ctx := context.Background()
-	agent, err := generator.NewAgent(ctx, projectID, location, modelName)
+	agent, err := generator.NewAgent(ctx, projectID, location, generationModel)
 	if err != nil {
 		log.Fatalf("Failed to create agent: %v", err)
 	}
 	defer agent.Close()
 
-	// 4. Initialize embedder client
-	embedClient, err := embedder.EmbedderClient(ctx, creds, rdb, modelName)
+	// Initialize embedder
+	embedClient, err := embedder.EmbedderClient(ctx, creds, rdb, embeddingModel)
 	if err != nil {
 		log.Fatalf("Failed to create embedder client: %v", err)
 	}
 
-	// 5. Prepare your query
-	query := "What does build_index.py do?"
+	// Prepare query
+	query := "What does embedder.go do?"
 
-	// 6. Retrieve chunks from Redis
+	// Retrieve index name
 	indexName, err := chunk_retriever.GetIndexName(rdb)
 	if err != nil {
 		log.Fatalf("Failed to get Redis index: %v", err)
 	}
 
-	chunkQuery := chunk_retriever.PrepareQuery(query, 5, indexName)
+	// Embed query
 	queryEmbedding, err := embedClient.EmbedQuery(query)
 	if err != nil {
 		log.Fatalf("Query embedding failed: %v", err)
 	}
 
+	// Retrieve relevant chunks
+	chunkQuery := chunk_retriever.PrepareQuery(query, 5, indexName)
 	chunks, err := chunk_retriever.RetrieveChunks(rdb, chunkQuery, queryEmbedding)
 	if err != nil {
 		log.Fatalf("Chunk retrieval failed: %v", err)
 	}
 
-	// 6. Ask the LLM to answer based on chunks
-	answer, err := agent.Answer(ctx, query, chunks)
+	// Build context from chunks
+	var builder strings.Builder
+	for _, ch := range chunks {
+		file := ch.Metadata["file"]
+		builder.WriteString(fmt.Sprintf("File: %s\n%s\n\n", file, ch.Text))
+	}
+	contextText := builder.String()
+
+	// Print retrieved context
+	fmt.Println("=== Retrieved Context ===")
+	fmt.Println(contextText)
+
+	// Construct prompt for LLM
+	prompt := fmt.Sprintf("Based on the following context, answer the question:\n%s\nQuestion: %s", contextText, query)
+
+	// Generate answer using the retrieved chunks
+	response, err := agent.Answer(ctx, prompt, chunks)
 	if err != nil {
-		log.Fatalf("LLM failed to answer: %v", err)
+		log.Fatalf("Generation failed: %v", err)
 	}
 
-	// 7. Print the result
+	// Print response
 	fmt.Println("=== LLM Response ===")
-	fmt.Println(answer)
+	fmt.Println(response)
 }
