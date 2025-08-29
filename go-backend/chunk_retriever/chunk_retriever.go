@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -96,6 +97,43 @@ func GetIndexName(rdb *redis.Client) (string, error) {
 	return indexes[0], nil
 }
 
+// EnsureIndex creates a RediSearch vector index if it does not already exist.
+// prefix should be something like "<indexName>:".
+func EnsureIndex(rdb *redis.Client, indexName, prefix string, dim int) error {
+	// If it exists, do nothing
+	indexes, err := getIndexes(rdb)
+	if err != nil {
+		return err
+	}
+	for _, idx := range indexes {
+		if idx == indexName {
+			return nil
+		}
+	}
+	// Create the index
+	ctx := context.Background()
+	args := []interface{}{
+		"FT.CREATE", indexName,
+		"ON", "HASH",
+		"PREFIX", 1, prefix,
+		"SCHEMA",
+		"text", "TEXT",
+		"file", "TAG",
+		"chunk", "NUMERIC",
+		"embedding", "VECTOR", "HNSW", 6,
+		"TYPE", "FLOAT32",
+		"DIM", dim,
+		"DISTANCE_METRIC", "COSINE",
+	}
+	if _, err := rdb.Do(ctx, args...).Result(); err != nil {
+		// If someone created it concurrently, ignore "Index already exists"
+		if !strings.Contains(strings.ToLower(err.Error()), "exists") {
+			return fmt.Errorf("failed to create index %s: %w", indexName, err)
+		}
+	}
+	return nil
+}
+
 func float32SliceToLEBytes(vec []float32) []byte {
 	buf := make([]byte, 4*len(vec))
 	for i, v := range vec {
@@ -115,7 +153,7 @@ func RetrieveChunks(rdb *redis.Client, query ChunkQuery, queryEmbedding []float3
 		fmt.Sprintf("*=>[KNN %d @embedding $vec AS vector_score]", query.TopK),
 		"PARAMS", 2, "vec", vec,
 		"SORTBY", "vector_score",
-		"RETURN", 2, "text", "vector_score",
+		"RETURN", 3, "text", "file", "vector_score",
 		"LIMIT", 0, query.TopK,
 		"DIALECT", 2,
 	).Result()

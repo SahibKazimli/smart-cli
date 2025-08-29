@@ -230,17 +230,19 @@ func (e *Embedder) EmbedDirectory(dir string, extensions []string) ([]FileEmbedd
 		for i, f := range embedding {
 			binary.LittleEndian.PutUint32(buf[i*4:(i+1)*4], math.Float32bits(f))
 		}
-
 		// Store embedding, path, and content in Redis
 		key := fmt.Sprintf("embedding:%s", file.Path)
-		err = e.RDB.HSet(e.Ctx, key, map[string]interface{}{
-			"path":      file.Path,
-			"content":   file.Content,
-			"embedding": buf,
-		}).Err()
-		if err != nil {
-			fmt.Printf("Warning: failed to store embedding in Redis for %s: %v\n", file.Path, err)
-			continue
+		if e.RDB != nil {
+			err = e.RDB.HSet(e.Ctx, key, map[string]interface{}{
+				"path":      file.Path,
+				"content":   file.Content,
+				"embedding": buf,
+			}).Err()
+			if err != nil {
+				fmt.Printf("Warning: failed to store embedding in Redis for %s: %v\n", file.Path, err)
+				continue
+			}
+
 		}
 	}
 	return embeddings, nil
