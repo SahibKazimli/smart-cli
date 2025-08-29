@@ -17,7 +17,7 @@ func main() {
 	// Load environment variables
 	err := godotenv.Load("/Users/sahibkazimli/go-projects/smart-cli/.env")
 	if err != nil {
-		log.Println("⚠️  Could not load .env file, relying on system environment")
+		log.Println("Could not load .env file, relying on system environment")
 	}
 	projectID := os.Getenv("GCP_PROJECT_ID")
 	location := os.Getenv("GCP_LOCATION")
@@ -80,11 +80,8 @@ func main() {
 	fmt.Println("=== Retrieved Context ===")
 	fmt.Println(contextText)
 
-	// Construct prompt for LLM
-	prompt := fmt.Sprintf("Based on the following context, answer the question:\n%s\nQuestion: %s", contextText, query)
-
 	// Generate answer using the retrieved chunks
-	response, err := agent.Answer(ctx, prompt, chunks)
+	response, err := agent.Answer(ctx, query, chunks)
 	if err != nil {
 		log.Fatalf("Generation failed: %v", err)
 	}

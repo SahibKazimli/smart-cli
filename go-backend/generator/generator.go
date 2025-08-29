@@ -88,8 +88,7 @@ func (g *Generator) Close() error {
 func (g *Generator) Answer(ctx context.Context, query string, chunks []chunk_retriever.Chunk) (string, error) {
 	// Build retrieved context and assemble the prompt
 	ctxText := buildContext(chunks)
-	prompt := assemblePrompt(SystemPrompt, query, ctxText)
-
+	prompt := assemblePrompt("", query, ctxText)
 	// Require a configured model
 	if g == nil || g.model == nil {
 		// Fallback: return the prompt preview if model not initialized
