@@ -242,8 +242,12 @@ func (e *Embedder) EmbedDirectory(dir string, extensions []string) ([]FileEmbedd
 				fmt.Printf("Warning: failed to store embedding in Redis for %s: %v\n", file.Path, err)
 				continue
 			}
-
 		}
+		embeddings = append(embeddings, FileEmbedding{
+			Path:      file.Path,
+			Content:   file.Content,
+			Embedding: embedding,
+		})
 	}
 	return embeddings, nil
 }
