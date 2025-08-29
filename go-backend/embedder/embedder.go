@@ -2,8 +2,10 @@ package embedder
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
 
@@ -46,7 +48,7 @@ func EmbedderClient(ctx context.Context, credsFile string, rdb *redis.Client, mo
 	// Load in necessary ID's for embedding model initialization
 	projectID := os.Getenv("GCP_PROJECT_ID")
 	location := os.Getenv("GCP_LOCATION")
-	model := "textembedding-gecko"
+	model := "text-embedding-005"
 
 	endpoint := fmt.Sprintf(
 		"projects/%s/locations/%s/publishers/google/models/%s",
@@ -223,11 +225,23 @@ func (e *Embedder) EmbedDirectory(dir string, extensions []string) ([]FileEmbedd
 			continue
 		}
 
-		embeddings = append(embeddings, FileEmbedding{
-			Path:      file.Path,
-			Content:   file.Content,
-			Embedding: embedding,
-		})
+		// Convert []float32 embedding to []byte
+		buf := make([]byte, 4*len(embedding))
+		for i, f := range embedding {
+			binary.LittleEndian.PutUint32(buf[i*4:(i+1)*4], math.Float32bits(f))
+		}
+
+		// Store embedding, path, and content in Redis
+		key := fmt.Sprintf("embedding:%s", file.Path)
+		err = e.RDB.HSet(e.Ctx, key, map[string]interface{}{
+			"path":      file.Path,
+			"content":   file.Content,
+			"embedding": buf,
+		}).Err()
+		if err != nil {
+			fmt.Printf("Warning: failed to store embedding in Redis for %s: %v\n", file.Path, err)
+			continue
+		}
 	}
 	return embeddings, nil
 }

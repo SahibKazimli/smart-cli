@@ -1,4 +1,4 @@
-# Smart CLI
+## Smart CLI
 A modular, AI-enhanced command-line interface that provides code review, error explanation, system suggestions, and more, powered by Python RAG/Agent modules and Vertex AI.
 
 
