@@ -2,12 +2,14 @@ package generator
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"sort"
 	"strings"
 
 	"smart-cli/go-backend/chunk_retriever"
 
-	"cloud.google.com/go/vertexai/genai"
+	"google.golang.org/genai"
 )
 
 const SystemPrompt = `
@@ -36,53 +38,24 @@ const SystemPrompt = `
 `
 
 type Generator struct {
-	projectID string
-	location  string
 	modelName string
-
-	// LLM client and model for generation
-	client *genai.Client
-	model  *genai.GenerativeModel
+	client    *genai.Client
 }
 
-func NewAgent(ctx context.Context, projectID, location, modelName string) (*Generator, error) {
-	// Initialize Vertex AI Generative client and model
-	client, err := genai.NewClient(ctx, projectID, location)
+func NewAgent(ctx context.Context, modelName string) (*Generator, error) {
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+		APIKey:  os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"),
+		Backend: genai.BackendGeminiAPI,
+	})
+
 	if err != nil {
 		return nil, err
 	}
-	m := client.GenerativeModel(modelName)
-	// Configure generation params; enforce your token/style constraints
-	temp := float32(0.2)
-	topP := float32(0.9)
-	topK := int32(32)
-	maxTokens := int32(700)
-
-	m.GenerationConfig = genai.GenerationConfig{
-		Temperature:     &temp,
-		TopP:            &topP,
-		TopK:            &topK,
-		MaxOutputTokens: &maxTokens,
-	}
-	// Set a stable system instruction matching your constraints
-	m.SystemInstruction = &genai.Content{
-		Parts: []genai.Part{genai.Text(SystemPrompt)},
-	}
 
 	return &Generator{
-		projectID: projectID,
-		location:  location,
 		modelName: modelName,
 		client:    client,
-		model:     m,
 	}, nil
-}
-
-func (g *Generator) Close() error {
-	if g != nil && g.client != nil {
-		return g.client.Close()
-	}
-	return nil
 }
 
 func (g *Generator) Answer(ctx context.Context, query string, chunks []chunk_retriever.Chunk) (string, error) {
@@ -90,32 +63,40 @@ func (g *Generator) Answer(ctx context.Context, query string, chunks []chunk_ret
 	ctxText := buildContext(chunks)
 	prompt := assemblePrompt("", query, ctxText)
 	// Require a configured model
-	if g == nil || g.model == nil {
+	if g == nil || g.client == nil {
 		// Fallback: return the prompt preview if model not initialized
 		return prompt, nil
 	}
 
-	// Call the model
-	resp, err := g.model.GenerateContent(ctx, genai.Text(prompt))
+	temp := float32(0.2)
+	topP := float32(0.9)
+	topK := float32(15)
+	maxTokens := int32(700)
+
+	resp, err := g.client.Models.GenerateContent(ctx, g.modelName, genai.Text(prompt), &genai.GenerateContentConfig{
+		Temperature:     &temp,
+		TopP:            &topP,
+		TopK:            &topK,
+		MaxOutputTokens: maxTokens,
+	})
+
+	// Extract text from first candidate
+	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
+		return "", fmt.Errorf("no content generated")
+	}
+	// Use resp.Text() to extract plain text
+	text := ""
+	for _, part := range resp.Candidates[0].Content.Parts {
+		if part.Text != "" {
+			text += part.Text
+		}
+	}
+
 	if err != nil {
 		return "", err
 	}
 
-	// Extract plain text from candidates
-	var out strings.Builder
-	if resp != nil {
-		for _, c := range resp.Candidates {
-			if c == nil || c.Content == nil {
-				continue
-			}
-			for _, p := range c.Content.Parts {
-				if t, ok := p.(genai.Text); ok {
-					out.WriteString(string(t))
-				}
-			}
-		}
-	}
-	return strings.TrimSpace(out.String()), nil
+	return strings.TrimSpace(resp.Text()), nil
 }
 
 // Helper: budget fit
