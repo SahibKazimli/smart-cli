@@ -72,6 +72,10 @@ func shouldSkipDir(name string) bool {
 	return skip
 }
 
+func defaultExtensions() []string {
+	return []string{".go", ".py", ".js", ".ts", ".tsx", ".jsx", ".json", ".md", ".txt", ".yaml", ".yml"}
+}
+
 func isAllowedExtension(path string) bool {
 	// A helper to decide whether an extension is allowed,
 	// thus allowing processing
@@ -83,6 +87,52 @@ func isAllowedExtension(path string) bool {
 		}
 	}
 	return false
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// findProjectRoot walks up from start until it finds a .git or go.mod directory/file.
+// If neither is found, returns the original start directory.
+func findProjectRoot(start string) string {
+	curr := start
+	for {
+		if fileExists(filepath.Join(curr, ".git")) || fileExists(filepath.Join(curr, "go.mod")) {
+			return curr
+		}
+		parent := filepath.Dir(curr)
+		if parent == curr {
+			return start
+		}
+		curr = parent
+	}
+}
+
+// detectBase decides the base directory to embed.
+// If dir is "", ".", or "./", it resolves to the project root based on the current working directory.
+// Otherwise, it returns the absolute path of dir.
+func detectBase(dir string) (string, error) {
+	var start string
+	if dir == "" || dir == "." || dir == "./" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return "", err
+		}
+		start = cwd
+	} else {
+		if !filepath.IsAbs(dir) {
+			cwd, err := os.Getwd()
+			if err != nil {
+				return "", err
+			}
+			dir = filepath.Clean(filepath.Join(cwd, dir))
+		}
+		start = dir
+	}
+	root := findProjectRoot(start)
+	return root, nil
 }
 
 func parsePrediction(pred *structpb.Value) ([]float32, error) {
