@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"smart-cli/go-backend/chunk_retriever"
 
 	aiplatform "cloud.google.com/go/aiplatform/apiv1"
 	"cloud.google.com/go/aiplatform/apiv1/aiplatformpb"
@@ -76,13 +77,14 @@ func defaultExtensions() []string {
 	return []string{".go", ".py", ".js", ".ts", ".tsx", ".jsx", ".json", ".md", ".txt", ".yaml", ".yml"}
 }
 
-func isAllowedExtension(path string) bool {
-	// A helper to decide whether an extension is allowed,
-	// thus allowing processing
-	allowed := []string{".go", ".py", ".js", ".cpp", ".txt"}
+func isAllowedExtension(path string, allowed []string) bool {
+	use := allowed
+	if len(use) == 0 {
+		use = defaultExtensions()
+	}
 	ext := filepath.Ext(path)
-	for _, i := range allowed {
-		if ext == i {
+	for _, a := range use {
+		if ext == a {
 			return true
 		}
 	}
@@ -194,7 +196,7 @@ func (e *Embedder) EmbedQuery(userInput string) ([]float32, error) {
 }
 
 // ReadDirectory Will walk through the current directory to read in content
-func ReadDirectory(dir string) (files []FileData, err error) {
+func ReadDirectory(dir string, extensions []string) (files []FileData, err error) {
 	// Recursively walks the directory tree starting at dir
 	// Filters by given extensions
 	// Returns a slice of FileData structs containing file paths and content
@@ -207,16 +209,15 @@ func ReadDirectory(dir string) (files []FileData, err error) {
 			return filepath.SkipDir
 		}
 		// Handle files
-		if !d.IsDir() && isAllowedExtension(path) {
+		if !d.IsDir() && isAllowedExtension(path, extensions) {
 			// process file
 			ctn, err := os.ReadFile(path)
 			if err != nil {
 				return err
 			}
-			text := string(ctn)
 			files = append(files, FileData{
 				Path:    path,
-				Content: text,
+				Content: string(ctn),
 			})
 		}
 		return nil
@@ -235,7 +236,12 @@ func (e *Embedder) EmbedDirectory(dir string, extensions []string) ([]FileEmbedd
 		Parses the predictions response to get the vector.
 	*/
 
-	files, err := ReadDirectory(dir)
+	base, err := detectBase(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	files, err := ReadDirectory(base, extensions)
 	if err != nil {
 		return nil, err
 	}
@@ -301,3 +307,95 @@ func (e *Embedder) EmbedDirectory(dir string, extensions []string) ([]FileEmbedd
 	}
 	return embeddings, nil
 }
+
+// ===== Redis Helpers =====
+
+// float32ToLEBytes converts a float32 slice to little-endian byte slice for RediSearch VECTOR.
+func float32ToLEBytes(vec []float32) []byte {
+	buf := make([]byte, 4*len(vec))
+	for i, v := range vec {
+		binary.LittleEndian.PutUint32(buf[i*4:], math.Float32bits(v))
+	}
+	return buf
+}
+
+// storeFileEmbeddingInRedis stores a diagnostic copy under key "embedding:<file.Path>".
+// embedding should be a little-endian []byte vector.
+func (e *Embedder) storeFileEmbeddingInRedis(file FileData, embedding []byte) error {
+	if e.RDB == nil {
+		return nil
+	}
+
+	key := fmt.Sprintf("embedding:%s", file.Path)
+	return e.RDB.HSet(e.Ctx, key, map[string]interface{}{
+		"path":      file.Path,
+		"content":   file.Content,
+		"embedding": embedding,
+	}).Err()
+}
+
+// storeEmbeddingsInRedis writes indexable entries under "<prefix><i>".
+// Each hash contains fields: text, file, chunk, embedding (LE bytes).
+func (e *Embedder) storeEmbeddingsInRedis(prefix string, embeddings []FileEmbedding) (int, error) {
+	if e.RDB == nil {
+		return 0, fmt.Errorf("redis client is nil")
+	}
+	for i, ebd := range embeddings {
+		key := fmt.Sprintf("%s%d", prefix, i)
+		vec := float32ToLEBytes(ebd.Embedding)
+
+		if err := e.RDB.HSet(e.Ctx, key, map[string]interface{}{
+			"text":      ebd.Content,
+			"embedding": vec,
+			"file":      ebd.Path,
+			"chunk":     i,
+		}).Err(); err != nil {
+			return i, fmt.Errorf("failed to store embedding for %s: %w", ebd.Path, err)
+		}
+	}
+	return len(embeddings), nil
+}
+
+func (e *Embedder) EmbedAndIndex(dir, indexName string, extensions []string) (string, int, error) {
+	base, err := detectBase(dir)
+	if err != nil {
+		return "", 0, err
+	}
+
+	embeddings, err := e.EmbedDirectory(base, extensions)
+	if err != nil {
+		return "", 0, err
+	}
+	if len(embeddings) == 0 {
+		return "", 0, fmt.Errorf("no embeddings generated")
+	}
+
+	if indexName == "" {
+		indexName = filepath.Base(base) + "_index"
+	}
+	prefix := indexName + ":"
+
+	// Ensure FT index exists with correct dimension
+	dim := len(embeddings[0].Embedding)
+	if err := chunk_retriever.EnsureIndex(e.RDB, indexName, prefix, dim); err != nil {
+		return "", 0, err
+	}
+	// Store in Redis
+	for i, ebd := range embeddings {
+		key := fmt.Sprintf("%s%d", prefix, i)
+		vec := float32ToLEBytes(ebd.Embedding)
+		if err := e.RDB.HSet(e.Ctx, key, map[string]interface{}{
+			"text":      ebd.Content,
+			"embedding": vec,
+			"file":      ebd.Path,
+			"chunk":     i,
+		}).Err(); err != nil {
+			// best-effort, but surface the error
+			return indexName, i, fmt.Errorf("failed to store embedding for %s: %w", ebd.Path, err)
+		}
+	}
+
+	return indexName, len(embeddings), nil
+}
+
+func (e *Embedder) StoreIndex()
