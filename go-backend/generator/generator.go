@@ -80,22 +80,38 @@ func (g *Generator) Answer(ctx context.Context, query string, chunks []chunk_ret
 		MaxOutputTokens: maxTokens,
 	})
 
-	// Extract text from first candidate
-	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
-		return "", fmt.Errorf("no content generated")
+	if err != nil {
+		return "", fmt.Errorf("failed to generate content: %w", err)
 	}
+
+	// Check if response is nil
+	if resp == nil {
+		return "", fmt.Errorf("received nil response from API")
+	}
+
+	// Extract text from first candidate
+	if len(resp.Candidates) == 0 {
+		return "", fmt.Errorf("no candidates in response")
+	}
+
+	if resp.Candidates[0] == nil || resp.Candidates[0].Content == nil {
+		return "", fmt.Errorf("first candidate or its content is nil")
+	}
+
+	if len(resp.Candidates[0].Content.Parts) == 0 {
+		return "", fmt.Errorf("no parts in first candidate's content")
+	}
+
 	// Use resp.Text() to extract plain text
 	text := ""
 	for _, part := range resp.Candidates[0].Content.Parts {
-		if part.Text != "" {
+		if part != nil && part.Text != "" {
 			text += part.Text
 		}
 	}
-
-	if err != nil {
-		return "", err
+	if text == "" {
+		return "", fmt.Errorf("no text generated")
 	}
-
 	return strings.TrimSpace(resp.Text()), nil
 }
 

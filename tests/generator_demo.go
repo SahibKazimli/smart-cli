@@ -29,16 +29,29 @@ func main() {
 		log.Fatal("Please set GCP_PROJECT_ID, GCP_LOCATION, and GOOGLE_APPLICATION_CREDENTIALS")
 	}
 
+	log.Printf("Using Project ID: %s, Location: %s", projectID, location)
+
 	// Connect to Redis
+	log.Println("Connecting to Redis...")
 	rdb := chunk_retriever.Connect()
+	if rdb == nil {
+		log.Fatal("Failed to connect to Redis")
+	}
+	log.Println("✓ Connected to Redis")
 
 	// Initialize LLM agent
 	ctx := context.Background()
-	agent, err := generator.NewAgent(ctx, projectID, location, generationModel)
+	log.Printf("Initializing LLM agent with model: %s", generationModel)
+	agent, err := generator.NewAgent(ctx, generationModel)
 	if err != nil {
 		log.Fatalf("Failed to create agent: %v", err)
 	}
-	defer agent.Close()
+	defer func() {
+		if err := agent.Close(); err != nil {
+			log.Printf("Error: Closing agent: %v", err)
+		}
+	}()
+	log.Println("Agent Initialized")
 
 	// Initialize embedder
 	embedClient, err := embedder.EmbedderClient(ctx, creds, rdb, embeddingModel)
