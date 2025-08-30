@@ -139,6 +139,40 @@ func detectBase(dir string) (string, error) {
 	return root, nil
 }
 
+// ReadDirectory Will walk through the current directory to read in content
+func ReadDirectory(dir string, extensions []string) (files []FileData, err error) {
+	// Recursively walks the directory tree starting at dir
+	// Filters by given extensions
+	// Returns a slice of FileData structs containing file paths and content
+	newErr := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		// Handle dirs
+		if d.IsDir() && shouldSkipDir(d.Name()) {
+			return filepath.SkipDir
+		}
+		// Handle files
+		if !d.IsDir() && isAllowedExtension(path, extensions) {
+			// process file
+			ctn, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			files = append(files, FileData{
+				Path:    path,
+				Content: string(ctn),
+			})
+		}
+		return nil
+	})
+
+	if newErr != nil {
+		return nil, newErr
+	}
+	return
+}
+
 // ===== Vertex AI helpers =====
 
 func parsePrediction(pred *structpb.Value) ([]float32, error) {
@@ -218,40 +252,6 @@ func (e *Embedder) EmbedQuery(userInput string) ([]float32, error) {
 		return nil, fmt.Errorf("warning")
 	}
 	return queryEmbedding, nil
-}
-
-// ReadDirectory Will walk through the current directory to read in content
-func ReadDirectory(dir string, extensions []string) (files []FileData, err error) {
-	// Recursively walks the directory tree starting at dir
-	// Filters by given extensions
-	// Returns a slice of FileData structs containing file paths and content
-	newErr := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		// Handle dirs
-		if d.IsDir() && shouldSkipDir(d.Name()) {
-			return filepath.SkipDir
-		}
-		// Handle files
-		if !d.IsDir() && isAllowedExtension(path, extensions) {
-			// process file
-			ctn, err := os.ReadFile(path)
-			if err != nil {
-				return err
-			}
-			files = append(files, FileData{
-				Path:    path,
-				Content: string(ctn),
-			})
-		}
-		return nil
-	})
-
-	if newErr != nil {
-		return nil, newErr
-	}
-	return
 }
 
 // ===== Redis Helpers =====
