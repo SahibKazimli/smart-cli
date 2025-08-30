@@ -64,6 +64,8 @@ func EmbedderClient(ctx context.Context, credsFile string, rdb *redis.Client, mo
 	}, nil
 }
 
+// ===== Repo scanning helpers =====
+
 func shouldSkipDir(name string) bool {
 	// A helper to decide whether a dir should be skipped for processing
 	skipDirs := map[string]struct{}{
@@ -137,6 +139,8 @@ func detectBase(dir string) (string, error) {
 	return root, nil
 }
 
+// ===== Vertex AI helpers =====
+
 func parsePrediction(pred *structpb.Value) ([]float32, error) {
 	// A helper to parse the prediction produced by the embedding model
 	// Try to parse the prediction as a list, checking for embeddings.values
@@ -165,6 +169,27 @@ func parsePrediction(pred *structpb.Value) ([]float32, error) {
 		embedding[idx] = float32(val.GetNumberValue())
 	}
 	return embedding, nil
+}
+
+func (e *Embedder) embedContent(content string) ([]float32, error) {
+	instance, err := structpb.NewStruct(map[string]interface{}{
+		"content": content,
+	})
+	if err != nil {
+		return nil, err
+	}
+	request := &aiplatformpb.PredictRequest{
+		Endpoint:  e.ModelEndpoint,
+		Instances: []*structpb.Value{structpb.NewStructValue(instance)},
+	}
+	resp, err := e.Client.Predict(e.Ctx, request)
+	if err != nil {
+		return nil, fmt.Errorf("prediction failed: %w", err)
+	}
+	if len(resp.Predictions) == 0 {
+		return nil, fmt.Errorf("no predictions returned")
+	}
+	return parsePrediction(resp.Predictions[0])
 }
 
 func (e *Embedder) EmbedQuery(userInput string) ([]float32, error) {
@@ -229,85 +254,6 @@ func ReadDirectory(dir string, extensions []string) (files []FileData, err error
 	return
 }
 
-func (e *Embedder) EmbedDirectory(dir string, extensions []string) ([]FileEmbedding, error) {
-	/*
-		Calls ReadDirectory and reads from all files in the working directory.
-		For each file, calls Vertex AI to generate embeddings.
-		Parses the predictions response to get the vector.
-	*/
-
-	base, err := detectBase(dir)
-	if err != nil {
-		return nil, err
-	}
-
-	files, err := ReadDirectory(base, extensions)
-	if err != nil {
-		return nil, err
-	}
-	var embeddings []FileEmbedding
-	for _, file := range files {
-		if len(file.Content) == 0 {
-			fmt.Printf("Skipping empty file: %s\n", file.Path)
-			continue
-		}
-		fmt.Println("Processing file:", file.Path)
-		instance, err := structpb.NewStruct(map[string]interface{}{
-			"content": file.Content,
-		})
-		if err != nil {
-			fmt.Printf("Warning: failed to create struct for %s: %v\n", file.Path, err)
-			continue
-		}
-
-		request := &aiplatformpb.PredictRequest{
-			Endpoint:  e.ModelEndpoint,
-			Instances: []*structpb.Value{structpb.NewStructValue(instance)},
-		}
-
-		resp, err := e.Client.Predict(e.Ctx, request)
-		if err != nil {
-			fmt.Printf("Warning: prediction failed for %s: %v\n", file.Path, err)
-			continue
-		}
-		// Check if the embedding model generated a response
-		if len(resp.Predictions) == 0 {
-			fmt.Printf("Warning: no predictions returned for %s\n", file.Path)
-			continue
-		}
-		embedding, err := parsePrediction(resp.Predictions[0])
-		if err != nil {
-			fmt.Printf("Warning: %v for %s\n", err, file.Path)
-			continue
-		}
-
-		// Convert []float32 embedding to []byte
-		buf := make([]byte, 4*len(embedding))
-		for i, f := range embedding {
-			binary.LittleEndian.PutUint32(buf[i*4:(i+1)*4], math.Float32bits(f))
-		}
-		// Store embedding, path, and content in Redis
-		key := fmt.Sprintf("embedding:%s", file.Path)
-		if e.RDB != nil {
-			err = e.RDB.HSet(e.Ctx, key, map[string]interface{}{
-				"path":      file.Path,
-				"content":   file.Content,
-				"embedding": buf,
-			}).Err()
-			if err != nil {
-				fmt.Printf("Warning: failed to store embedding in Redis for %s: %v\n", file.Path, err)
-				continue
-			}
-		}
-		embeddings = append(embeddings, FileEmbedding{
-			Path:      file.Path,
-			Content:   file.Content,
-			Embedding: embedding,
-		})
-	}
-	return embeddings, nil
-}
-
 // ===== Redis Helpers =====
 
 // float32ToLEBytes converts a float32 slice to little-endian byte slice for RediSearch VECTOR.
@@ -356,6 +302,45 @@ func (e *Embedder) storeEmbeddingsInRedis(prefix string, embeddings []FileEmbedd
 	return len(embeddings), nil
 }
 
+// ===== Public API =====
+
+func (e *Embedder) EmbedDirectory(dir string, extensions []string) ([]FileEmbedding, error) {
+	/*
+		Calls ReadDirectory and reads from all files in the working directory.
+		For each file, calls Vertex AI to generate embeddings.
+		Parses the predictions response to get the vector.
+	*/
+
+	base, err := detectBase(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	files, err := ReadDirectory(base, extensions)
+	if err != nil {
+		return nil, err
+	}
+	var embeddings []FileEmbedding
+	for _, file := range files {
+		if len(file.Content) == 0 {
+			continue
+		}
+		emb, err := e.embedContent(file.Content)
+		if err != nil {
+			fmt.Printf("Warning: embed failed for %s: %v\n", file.Path, err)
+			continue
+		}
+		embeddings = append(embeddings, FileEmbedding{
+			Path:      file.Path,
+			Content:   file.Content,
+			Embedding: emb,
+		})
+	}
+	return embeddings, nil
+}
+
+// EmbedAndIndex embeds and writes the results to a RediSearch index.
+// - If dir is "", ".", or "./", it embeds from the project root.
 func (e *Embedder) EmbedAndIndex(dir, indexName string, extensions []string) (string, int, error) {
 	base, err := detectBase(dir)
 	if err != nil {
@@ -378,24 +363,10 @@ func (e *Embedder) EmbedAndIndex(dir, indexName string, extensions []string) (st
 	// Ensure FT index exists with correct dimension
 	dim := len(embeddings[0].Embedding)
 	if err := chunk_retriever.EnsureIndex(e.RDB, indexName, prefix, dim); err != nil {
-		return "", 0, err
-	}
-	// Store in Redis
-	for i, ebd := range embeddings {
-		key := fmt.Sprintf("%s%d", prefix, i)
-		vec := float32ToLEBytes(ebd.Embedding)
-		if err := e.RDB.HSet(e.Ctx, key, map[string]interface{}{
-			"text":      ebd.Content,
-			"embedding": vec,
-			"file":      ebd.Path,
-			"chunk":     i,
-		}).Err(); err != nil {
-			// best-effort, but surface the error
-			return indexName, i, fmt.Errorf("failed to store embedding for %s: %w", ebd.Path, err)
-		}
+		return indexName, 0, err
 	}
 
-	return indexName, len(embeddings), nil
+	// Store to index prefix
+	n, err := e.storeEmbeddingsInRedis(prefix, embeddings)
+	return indexName, n, err
 }
-
-func (e *Embedder) StoreIndex()
