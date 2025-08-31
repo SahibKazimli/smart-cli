@@ -4,6 +4,7 @@ go 1.24.5
 
 require (
 	cloud.google.com/go/aiplatform v1.90.0
+	cloud.google.com/go/vertexai v0.15.0
 	github.com/joho/godotenv v1.5.1
 	github.com/redis/go-redis/v9 v9.12.1
 	google.golang.org/api v0.248.0

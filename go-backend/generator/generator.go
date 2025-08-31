@@ -3,7 +3,6 @@ package generator
 import (
 	"context"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 
@@ -43,10 +42,7 @@ type Generator struct {
 }
 
 func NewAgent(ctx context.Context, modelName string) (*Generator, error) {
-	client, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"),
-		Backend: genai.BackendGeminiAPI,
-	})
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{})
 
 	if err != nil {
 		return nil, err
