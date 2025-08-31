@@ -66,7 +66,7 @@ func EmbedderClient(ctx context.Context, credsFile string, rdb *redis.Client, mo
 
 // ===== Repo scanning helpers =====
 
-func shouldSkipDir(name string) bool {
+func ShouldSkipDir(name string) bool {
 	// A helper to decide whether a dir should be skipped for processing
 	skipDirs := map[string]struct{}{
 		"venv": {}, "__pycache__": {}, "node_modules": {}, ".git": {},
@@ -149,7 +149,7 @@ func ReadDirectory(dir string, extensions []string) (files []FileData, err error
 			return err
 		}
 		// Handle dirs
-		if d.IsDir() && shouldSkipDir(d.Name()) {
+		if d.IsDir() && ShouldSkipDir(d.Name()) {
 			return filepath.SkipDir
 		}
 		// Handle files

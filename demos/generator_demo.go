@@ -46,11 +46,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create agent: %v", err)
 	}
-	defer func() {
-		if err := agent.Close(); err != nil {
-			log.Printf("Error: Closing agent: %v", err)
-		}
-	}()
 	log.Println("Agent Initialized")
 
 	// Initialize embedder
