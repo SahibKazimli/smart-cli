@@ -7,20 +7,21 @@ A modular, AI-enhanced command-line interface that provides code review, error e
 
 - Create a local-first, intelligent CLI that enhances standard terminal workflows.
 - Provide AI-powered insights for code, system diagnostics, and command suggestions.
-- Build a modular architecture that allows adding new skills/plugins easily.
-- Showcase integration of Go CLI, Python AI modules, and cloud LLMs (Vertex AI).
+- Showcase integration of Go CLI, and cloud LLMs (Vertex AI).
 
 ## Current Development
 
-- Project skeleton with Go CLI and Python RAG/Agent folder.
-- Basic CLI command (code-review) calling a dummy Python skill.
-- AI integration using LangChain + Vertex AI.
-- Colored/progress-enhanced terminal output.
-- Context/history tracking for smarter suggestions.
-- Parallell chunk retrieval for performance
+- Basic CLI command (code-review)
+- Routing internally based on user input, instead of creating tools
+- Repo scanning to enable LLM responses dynamically
+- AI integration using Vertex AI 
+- Colored/progress-enhanced terminal output
+- Context/history tracking for smarter suggestions
+- Parallel chunk retrieval and embedding for performance
 
-## Sidelined objectives for the time being
+## Sidelined objectives 
 - Additional skills: error-explanation, system-check.
 - Plugin system for modular skill addition.
+- Python code is not going to be used, including skills.
 
 
