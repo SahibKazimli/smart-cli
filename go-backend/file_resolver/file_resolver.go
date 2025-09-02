@@ -4,6 +4,7 @@ import (
 	"io/fs"
 	"path/filepath"
 	"smart-cli/go-backend/embedder"
+	"sort"
 	"strings"
 )
 
@@ -75,5 +76,36 @@ func isCodeFile(name string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// Helper: Self explanatory name, it prefers to sort by shortest path
+func sortByShorter(paths []string) []string {
+	pathSlice := make([]string, len(paths))
+	sort.Slice(pathSlice, func(i, j int) bool {
+		// Using a simple heuristic, shorter path and .go preferred
+		if len(pathSlice[i]) > len(pathSlice[j]) {
+			return pathSlice[i] > pathSlice[j]
+
+		} else if len(pathSlice[i]) < len(pathSlice[j]) {
+			return pathSlice[i] < pathSlice[j]
+		}
+		// if length equal, prefer ".go" files
+		return strings.HasSuffix(pathSlice[i], ".go") && !strings.HasSuffix(pathSlice[j], ".go")
+	})
+	return pathSlice
+}
+
+// Resolve tries to map a user token (e.g., "embedder.go" or "embedder")
+// to concrete file paths.
+// Returns candidates sorted by best-first.
+func (r *Resolver) Resolve(token string) []string {
+	userInput := strings.ToLower(strings.TrimSpace(token))
+	if userInput == "" {
+		return nil
+	}
+	// First check if there's an exact match
+	if paths, ok := r.byBase[userInput]; ok && len(paths) > 0 {
+		return sortByShorter(paths)
 	}
 }
