@@ -304,6 +304,10 @@ func (e *Embedder) storeEmbeddingsInRedis(prefix string, embeddings []FileEmbedd
 
 // ===== Public API =====
 
+func (e *Embedder) EmbedText(content string) ([]float32, error) {
+	return e.embedContent(content)
+}
+
 func (e *Embedder) EmbedDirectory(dir string, extensions []string) ([]FileEmbedding, error) {
 	/*
 		Calls ReadDirectory and reads from all files in the working directory.

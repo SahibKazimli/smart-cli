@@ -112,10 +112,10 @@ func (r *Resolver) Resolve(token string) []string {
 	// Fallback to get partial matches with substrings (for example: "embedder")
 	var matches []string
 	for _, pathsList := range r.byBase {
-		for _, paths := range pathsList {
-			base := strings.ToLower(strings.TrimSpace(filepath.Base(paths)))
+		for _, path := range pathsList {
+			base := strings.ToLower(strings.TrimSpace(filepath.Base(path)))
 			if strings.Contains(base, userInput) {
-				matches = append(matches, paths)
+				matches = append(matches, path)
 			}
 		}
 	}
