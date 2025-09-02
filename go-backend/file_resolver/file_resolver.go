@@ -82,6 +82,7 @@ func isCodeFile(name string) bool {
 // Helper: Self explanatory name, it prefers to sort by shortest path
 func sortByShorter(paths []string) []string {
 	pathSlice := make([]string, len(paths))
+	copy(pathSlice, paths)
 	sort.Slice(pathSlice, func(i, j int) bool {
 		// Using a simple heuristic, shorter path and .go preferred
 		if len(pathSlice[i]) > len(pathSlice[j]) {
@@ -108,4 +109,19 @@ func (r *Resolver) Resolve(token string) []string {
 	if paths, ok := r.byBase[userInput]; ok && len(paths) > 0 {
 		return sortByShorter(paths)
 	}
+	// Fallback to get partial matches with substrings (for example: "embedder")
+	var matches []string
+	for _, pathsList := range r.byBase {
+		for _, paths := range pathsList {
+			base := strings.ToLower(strings.TrimSpace(filepath.Base(paths)))
+			if strings.Contains(base, userInput) {
+				matches = append(matches, paths)
+			}
+		}
+	}
+	// A last sort by shortest path
+	if len(matches) > 0 {
+		return sortByShorter(matches)
+	}
+	return nil
 }
