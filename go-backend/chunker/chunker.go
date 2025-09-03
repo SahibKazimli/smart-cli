@@ -2,10 +2,10 @@ package chunker
 
 import (
 	"os"
-	"os/exec"
+	"unicode/utf8"
 )
 
-type Chunks struct {
+type Chunk struct {
 	num  int
 	Text string
 }
@@ -41,4 +41,34 @@ func SplitText(s string, size, overlap int) []string {
 		}
 	}
 	return chunks
+}
+
+// SplitFile reads a file from disk and splits its content into chunks of text
+// The return type is a slice of Chunk structs
+func SplitFile(filePath string, chunkSize, overlap int) ([]Chunk, error) {
+	// read entire file into memory
+	fileBytes, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+	// Safety measures for UTF-8 encoding
+	fileContent := string(fileBytes)
+	if !utf8.ValidString(fileContent) {
+		// skip binary or invalid UTF-8 files
+		return nil, nil
+	}
+	// Break the string down into chunks
+	chunkStrings := SplitText(fileContent, chunkSize, overlap)
+
+	chunks := make([]Chunk, len(chunkStrings))
+
+	// Creating slice of Chunk structs containing different metadata
+	for i, text := range chunkStrings {
+		chunks[i] = Chunk{
+			num:  i,
+			Text: text,
+		}
+	}
+
+	return chunks, nil
 }
