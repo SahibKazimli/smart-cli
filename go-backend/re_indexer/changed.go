@@ -13,8 +13,19 @@ func ChangedFiles(baseReference string) []string {
 		baseReference = "origin/main"
 	}
 	// We will run this command
+	// We will check if re-indexing is needed by running git diff commands
 	cmd := exec.Command("git", "diff", "--name-only", baseReference+"..HEAD")
-	var out bytes.Buffer
-	cmd.Stdout = &out
+	var commandOut bytes.Buffer
+	cmd.Stdout = &commandOut
 	_ = cmd.Run()
+
+	changedLines := strings.Split(commandOut.String(), "\n")
+	var changedFiles []string
+	for _, line := range changedLines {
+		trimLine := strings.TrimSpace(line)
+		if trimLine != "" {
+			changedFiles = append(changedFiles, trimLine)
+		}
+	}
+	return changedFiles
 }
