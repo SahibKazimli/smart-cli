@@ -1,19 +1,52 @@
 package re_indexer
 
 import (
-	""
-	"bytes"
 	"context"
-	"os/exec"
-	"strings"
+	"fmt"
+	"github.com/redis/go-redis/v9"
+	"path/filepath"
+	"smart-cli/go-backend/chunker"
+	"smart-cli/go-backend/embedder"
 )
 
-/* The goal of this module is to keep the semantic search fresh
-whenever a user changes the codebase. But we don't want to re-embed
-every time a character is changed, so I'll try figuring out a way to
-control re-embeddings.
-*/
+type Indexer struct {
+	Redis     *redis.Client
+	Embedder  *embedder.Embedder
+	Root      string
+	IndexName string
+}
 
-// ChangedFiles returns files changed between baseRef and HEAD.
-// Example baseRef: "origin/main" or a commit hash.
-// Falls back to empty slice on error.
+func NewIndexer(redisClient *redis.Client, emb *embedder.Embedder, root string, indexName string) *Indexer {
+	if root == "" {
+		root = "."
+	}
+	if indexName == "" {
+		indexName = filepath.Base(root) + "_index"
+	}
+	return &Indexer{
+		Redis:     redisClient,
+		Embedder:  emb,
+		Root:      root,
+		IndexName: indexName,
+	}
+}
+
+func (i *Indexer) IndexFile(ctx context.Context, path string, chunkSize int, overlap int) (int, error) {
+	chunks, err := chunker.SplitFile(path, 600, 200)
+	if err != nil {
+		return 0, err
+	}
+	if len(chunks) == 0 {
+		return 0, fmt.Errorf("Warning: no chunks produced from file %s", path)
+	}
+	for _, chunk := range chunks {
+		for vector, err := i.Embedder.EmbedText(chunk.Text)
+		if err != nil {
+			fmt.Printf("Warning: failed embedding chunk")
+			continue
+		}
+
+		}
+	}
+
+}
