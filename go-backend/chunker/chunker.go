@@ -6,8 +6,8 @@ import (
 )
 
 type Chunk struct {
-	num  int
-	Text string
+	Index int
+	Text  string
 }
 
 // SplitText does a simple character-count chunk with overlap (UTF-8 safe).
