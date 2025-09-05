@@ -47,17 +47,30 @@ func (i *Indexer) IndexFile(ctx context.Context, path string, chunkSize int, ove
 		return 0, fmt.Errorf("Warning: no chunks produced from file %s", path)
 	}
 	for _, chunk := range chunks {
-			vector, err := i.Embedder.EmbedText(chunk.Text)
-			if err != nil {
-				fmt.Printf("Warning: failed embedding chunk")
-				continue
-			}
-
+		vector, err := i.Embedder.EmbedText(chunk.Text)
+		if err != nil {
+			fmt.Printf("Warning: failed embedding chunk")
+			continue
+		}
+		if err := i.storeChunk(ctx, path, chunk.Index, chunk.Text, vector); err != nil {
+			fmt.Printf("Warning: failed storing chunk %d: %v\n", chunk.Index, err)
+			continue
 		}
 	}
 }
 
 // ===== Helpers =====
+
+// storeChunk saves a single chunk in Redis under a simple key
+func (ix *Indexer) storeChunk(ctx context.Context, filePath string, chunkNo int, text string, vec []float32) error {
+	key := fmt.Sprintf("%s:%s:%d", ix.IndexName, filepath.Base(filePath), chunkNo)
+	return ix.Redis.HSet(ctx, key, map[string]any{
+		"text":      text,
+		"file":      filePath,
+		"chunk":     chunkNo,
+		"embedding": float32ToBytes(vec),
+	}).Err()
+}
 
 // float32ToBytes converts a float32 slice to little-endian bytes
 func float32ToBytes(vec []float32) []byte {
@@ -67,4 +80,3 @@ func float32ToBytes(vec []float32) []byte {
 	}
 	return b
 }
-
