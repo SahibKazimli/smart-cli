@@ -6,12 +6,8 @@ import (
 	"fmt"
 	"math"
 	"path/filepath"
-	"strings"
-	"sync"
 
 	"github.com/redis/go-redis/v9"
-
-	"smart-cli/go-backend/chunk_retriever"
 	"smart-cli/go-backend/chunker"
 	"smart-cli/go-backend/embedder"
 )
@@ -38,18 +34,18 @@ func NewIndexer(redisClient *redis.Client, emb *embedder.Embedder, root string, 
 	}
 }
 
-func (i *Indexer) IndexFile(ctx context.Context, path string, chunkSize int, overlap int) (int, error) {
-	chunks, err := chunker.SplitFile(path, 600, 200)
+func (i *Indexer) IndexFile(ctx context.Context, path string, chunkSize int, overlap int) error {
+	chunks, err := chunker.SplitFile(path, chunkSize, overlap)
 	if err != nil {
-		return 0, err
+		return err
 	}
 	if len(chunks) == 0 {
-		return 0, fmt.Errorf("Warning: no chunks produced from file %s", path)
+		return fmt.Errorf("warning: no chunks produced from file %s", path)
 	}
 	for _, chunk := range chunks {
 		vector, err := i.Embedder.EmbedText(chunk.Text)
 		if err != nil {
-			fmt.Printf("Warning: failed embedding chunk")
+			fmt.Printf("Warning: failed embedding chunk %d: %v\n", chunk.Index, err)
 			continue
 		}
 		if err := i.storeChunk(ctx, path, chunk.Index, chunk.Text, vector); err != nil {
@@ -57,6 +53,7 @@ func (i *Indexer) IndexFile(ctx context.Context, path string, chunkSize int, ove
 			continue
 		}
 	}
+	return nil
 }
 
 // ===== Helpers =====
