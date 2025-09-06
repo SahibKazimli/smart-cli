@@ -310,37 +310,51 @@ func (e *Embedder) EmbedText(content string) ([]float32, error) {
 	return e.embedContent(content)
 }
 
+/*
+EmbedDirectory calls ReadDirectory and reads from all files in the working directory.
+For each file, calls Vertex AI to generate embeddings.
+Parses the predictions response to get the vector.
+*/
 func (e *Embedder) EmbedDirectory(dir string, extensions []string) ([]FileEmbedding, error) {
-	/*
-		Calls ReadDirectory and reads from all files in the working directory.
-		For each file, calls Vertex AI to generate embeddings.
-		Parses the predictions response to get the vector.
-	*/
+
+	var wg sync.WaitGroup
+	fileCh := make(chan FileData)
+	embCh := make(chan FileEmbedding)
+	errCh := make(chan error)
 
 	base, err := detectBase(dir)
 	if err != nil {
 		return nil, err
 	}
+	// Calling read directory worker
+	wg.Add(1)
+	go ReadDirWorker(base, extensions, fileCh, &wg, errCh)
 
-	files, err := ReadDirectory(base, extensions)
-	if err != nil {
-		return nil, err
+	// Spawning embedding workers for each file
+	numWorkers := 10
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for file := range fileCh {
+				EmbedFileWorker(e, file, embCh, &wg, errCh)
+			}
+		}()
 	}
+	// Close the workers after waiting for them to finish
+	go func() {
+		wg.Wait()
+		close(embCh)
+		close(errCh)
+	}()
+	// Collect embeddings
 	var embeddings []FileEmbedding
-	for _, file := range files {
-		if len(file.Content) == 0 {
-			continue
-		}
-		emb, err := e.embedContent(file.Content)
-		if err != nil {
-			fmt.Printf("Warning: embed failed for %s: %v\n", file.Path, err)
-			continue
-		}
-		embeddings = append(embeddings, FileEmbedding{
-			Path:      file.Path,
-			Content:   file.Content,
-			Embedding: emb,
-		})
+	for emb := range embCh {
+		embeddings = append(embeddings, emb)
+	}
+	// Error logs
+	for err := range errCh {
+		fmt.Println("Warning:", err)
 	}
 	return embeddings, nil
 }
@@ -379,7 +393,7 @@ func (e *Embedder) EmbedAndIndex(dir, indexName string, extensions []string) (st
 
 // ===== Goroutine workers =====
 
-func readDirWorker(dir string, extensions []string, ch chan<- FileData, wg *sync.WaitGroup, errCh chan<- error) {
+func ReadDirWorker(dir string, extensions []string, ch chan<- FileData, wg *sync.WaitGroup, errCh chan<- error) {
 	defer wg.Done()
 	files, err := ReadDirectory(dir, extensions)
 	if err != nil {
@@ -391,9 +405,9 @@ func readDirWorker(dir string, extensions []string, ch chan<- FileData, wg *sync
 	}
 }
 
-// embedFileWorker is a worker for embedding single files, and will be called in EmbedDirectory
+// EmbedFileWorker is a worker for embedding single files, and will be called in EmbedDirectory
 // which will act as a manager
-func embedFileWorker(e *Embedder, file FileData, ch chan<- FileEmbedding, wg *sync.WaitGroup, errCh chan<- error) {
+func EmbedFileWorker(e *Embedder, file FileData, ch chan<- FileEmbedding, wg *sync.WaitGroup, errCh chan<- error) {
 
 	defer wg.Done()
 	// Skip empty files
@@ -413,7 +427,7 @@ func embedFileWorker(e *Embedder, file FileData, ch chan<- FileEmbedding, wg *sy
 	}
 }
 
-func storeEmbeddingWorker(rdb *redis.Client, embeddings <-chan FileEmbedding, wg *sync.WaitGroup, errCh chan<- error) {
+func StoreEmbeddingWorker(rdb *redis.Client, embeddings <-chan FileEmbedding, wg *sync.WaitGroup, errCh chan<- error) {
 	defer wg.Done()
 	for e := range embeddings {
 		key := fmt.Sprintf("index:%s", e.Path)
