@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"smart-cli/go-backend/chunk_retriever"
+	"sync"
 
 	aiplatform "cloud.google.com/go/aiplatform/apiv1"
 	"cloud.google.com/go/aiplatform/apiv1/aiplatformpb"
@@ -267,6 +268,7 @@ func float32ToLEBytes(vec []float32) []byte {
 
 // storeFileEmbeddingInRedis stores a diagnostic copy under key "embedding:<file.Path>".
 // embedding should be a little-endian []byte vector.
+// Unneeded
 func (e *Embedder) storeFileEmbeddingInRedis(file FileData, embedding []byte) error {
 	if e.RDB == nil {
 		return nil
@@ -373,4 +375,55 @@ func (e *Embedder) EmbedAndIndex(dir, indexName string, extensions []string) (st
 	// Store to index prefix
 	n, err := e.storeEmbeddingsInRedis(prefix, embeddings)
 	return indexName, n, err
+}
+
+// ===== Goroutine workers =====
+
+func readDirWorker(dir string, extensions []string, ch chan<- FileData, wg *sync.WaitGroup, errCh chan<- error) {
+	defer wg.Done()
+	files, err := ReadDirectory(dir, extensions)
+	if err != nil {
+		errCh <- fmt.Errorf("failed reading %s: %w", dir, err)
+		return
+	}
+	for _, f := range files {
+		ch <- f
+	}
+}
+
+// embedFileWorker is a worker for embedding single files, and will be called in EmbedDirectory
+// which will act as a manager
+func embedFileWorker(e *Embedder, file FileData, ch chan<- FileEmbedding, wg *sync.WaitGroup, errCh chan<- error) {
+
+	defer wg.Done()
+	// Skip empty files
+	if len(file.Content) == 0 {
+		return
+	}
+	// embed content
+	emb, err := e.embedContent(file.Content)
+	if err != nil {
+		errCh <- fmt.Errorf("warning: embedding failed for file: %s: %w", file.Path, err)
+		return
+	}
+	ch <- FileEmbedding{
+		Path:      file.Path,
+		Content:   file.Content,
+		Embedding: emb,
+	}
+}
+
+func storeEmbeddingWorker(rdb *redis.Client, embeddings <-chan FileEmbedding, wg *sync.WaitGroup, errCh chan<- error) {
+	defer wg.Done()
+	for e := range embeddings {
+		key := fmt.Sprintf("index:%s", e.Path)
+		vec := float32ToLEBytes(e.Embedding)
+		if err := rdb.HSet(context.Background(), key, map[string]interface{}{
+			"text":      e.Content,
+			"embedding": vec,
+			"file":      e.Path,
+		}).Err(); err != nil {
+			errCh <- fmt.Errorf("failed to store embedding for %s: %w", e.Path, err)
+		}
+	}
 }
