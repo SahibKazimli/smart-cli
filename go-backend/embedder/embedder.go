@@ -337,7 +337,7 @@ func (e *Embedder) EmbedDirectory(dir string, extensions []string) ([]FileEmbedd
 		go func() {
 			defer wg.Done()
 			for file := range fileCh {
-				EmbedFileWorker(e, file, embCh, &wg, errCh)
+				EmbedFileWorker(e, file, embCh, nil, errCh)
 			}
 		}()
 	}
@@ -395,6 +395,7 @@ func (e *Embedder) EmbedAndIndex(dir, indexName string, extensions []string) (st
 
 func ReadDirWorker(dir string, extensions []string, ch chan<- FileData, wg *sync.WaitGroup, errCh chan<- error) {
 	defer wg.Done()
+	defer close(ch)
 	files, err := ReadDirectory(dir, extensions)
 	if err != nil {
 		errCh <- fmt.Errorf("failed reading %s: %w", dir, err)
@@ -407,9 +408,7 @@ func ReadDirWorker(dir string, extensions []string, ch chan<- FileData, wg *sync
 
 // EmbedFileWorker is a worker for embedding single files, and will be called in EmbedDirectory
 // which will act as a manager
-func EmbedFileWorker(e *Embedder, file FileData, ch chan<- FileEmbedding, wg *sync.WaitGroup, errCh chan<- error) {
-
-	defer wg.Done()
+func EmbedFileWorker(e *Embedder, file FileData, ch chan<- FileEmbedding, _ *sync.WaitGroup, errCh chan<- error) {
 	// Skip empty files
 	if len(file.Content) == 0 {
 		return
