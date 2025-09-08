@@ -1,7 +1,9 @@
 package chunker
 
 import (
+	"fmt"
 	"os"
+	"sync"
 	"unicode/utf8"
 )
 
@@ -65,10 +67,57 @@ func SplitFile(filePath string, chunkSize, overlap int) ([]Chunk, error) {
 	// Creating slice of Chunk structs containing different metadata
 	for i, text := range chunkStrings {
 		chunks[i] = Chunk{
-			num:  i,
-			Text: text,
+			Index: i,
+			Text:  text,
 		}
 	}
 
 	return chunks, nil
+}
+
+// ===== Go workers =====
+// ChunkFileWorker reads and splits a file into chunks, then sends them on outCh.
+func ChunkFileWorker(filePath string, chunkSize, overlap int, outCh chan<- []Chunk, wg *sync.WaitGroup, errCh chan<- error) {
+	defer wg.Done()
+
+	chunks, err := SplitFile(filePath, chunkSize, overlap)
+	if err != nil {
+		errCh <- fmt.Errorf("failed to split file %s: %w", filePath, err)
+		return
+	}
+	if len(chunks) > 0 {
+		outCh <- chunks
+	}
+}
+
+// ChunkDirectoryConcurrently takes a slice of file paths and spawns workers for each file.
+func ChunkDirectoryConcurrently(files []string, chunkSize, overlap int) ([][]Chunk, error) {
+	var wg sync.WaitGroup
+	outCh := make(chan []Chunk)
+	errCh := make(chan error, len(files))
+
+	// Start workers
+	for _, f := range files {
+		wg.Add(1)
+		go ChunkFileWorker(f, chunkSize, overlap, outCh, &wg, errCh)
+	}
+
+	// Close output channel once all workers finish
+	go func() {
+		wg.Wait()
+		close(outCh)
+		close(errCh)
+	}()
+
+	// Collect results
+	var allChunks [][]Chunk
+	for chs := range outCh {
+		allChunks = append(allChunks, chs)
+	}
+
+	// Check if any errors occurred
+	if len(errCh) > 0 {
+		return allChunks, <-errCh
+	}
+	return allChunks, nil
 }

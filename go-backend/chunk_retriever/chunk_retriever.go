@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -222,5 +223,29 @@ func toString(v any) string {
 		return string(t)
 	default:
 		return fmt.Sprintf("%v", t)
+	}
+}
+
+// ===== Chunk retriever workers =====
+
+// RetrieveWorker listens for queries on queryCh, runs retrieval, and sends results.
+func RetrieveWorker(
+	rdb *redis.Client,
+	queryCh <-chan struct {
+	Query     ChunkQuery
+	Embedding []float32
+},
+	resultCh chan<- []Chunk,
+	wg *sync.WaitGroup,
+	errCh chan<- error,
+) {
+	defer wg.Done()
+	for q := range queryCh {
+		results, err := RetrieveChunks(rdb, q.Query, q.Embedding)
+		if err != nil {
+			errCh <- fmt.Errorf("retrieval failed for %q: %w", q.Query.Query, err)
+			continue
+		}
+		resultCh <- results
 	}
 }
