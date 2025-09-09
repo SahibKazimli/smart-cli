@@ -3,177 +3,170 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/redis/go-redis/v9"
 	"log"
 	"os"
-
-	"smart-cli/go-backend/chunk_retriever"
-	"smart-cli/go-backend/embedder"
+	"sort"
+	"sync"
+	"time"
 
 	"github.com/joho/godotenv"
+	"smart-cli/go-backend/chunk_retriever"
+	"smart-cli/go-backend/embedder"
 )
 
-func loadEnv() error {
-	// Try to load .env file from current directory
-	if err := godotenv.Load("/Users/sahibkazimli/go-projects/smart-cli/.env"); err != nil {
-		// Try to load from parent directory (go-backend)
-		if err := godotenv.Load("../.env"); err != nil {
-			// Try to load from project root
-			if err := godotenv.Load("../../.env"); err != nil {
-				fmt.Println("⚠️  No .env file found, using system environment variables")
-			} else {
-				fmt.Println("✅ Loaded .env from project root")
-			}
-		} else {
-			fmt.Println("✅ Loaded .env from go-backend directory")
-		}
-	} else {
-		fmt.Println("✅ Loaded .env from current directory")
-	}
-	return nil
+type QueryResult struct {
+	Query     string
+	Chunks    []chunk_retriever.Chunk
+	Err       error
+	Elapsed   time.Duration
+	IndexName string
 }
 
 func main() {
-	fmt.Println("🧪 Testing chunk_retriever and embedder functionality...")
-	fmt.Println("=====================================================")
+	_ = godotenv.Load(".env")
 
-	// Load environment variables
-	fmt.Println("\n1. Loading environment variables...")
-	if err := loadEnv(); err != nil {
-		log.Printf("Warning: Failed to load .env file: %v", err)
-	}
-
-	// Check environment variables
-	fmt.Println("\n2. Checking environment variables...")
 	projectID := os.Getenv("GCP_PROJECT_ID")
 	location := os.Getenv("GCP_LOCATION")
-	credsFile := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
-
-	if projectID == "" {
-		log.Fatal("❌ GCP_PROJECT_ID environment variable not set")
-	}
-	if location == "" {
-		log.Fatal("❌ GCP_LOCATION environment variable not set")
-	}
-	if credsFile == "" {
-		log.Fatal("❌ GOOGLE_APPLICATION_CREDENTIALS environment variable not set")
+	creds := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
+	fmt.Println("GCP_PROJECT_ID:", projectID)
+	fmt.Println("GCP_LOCATION:", location)
+	fmt.Println("GOOGLE_APPLICATION_CREDENTIALS:", creds)
+	if projectID == "" || location == "" || creds == "" {
+		log.Fatal("Missing one of GCP_PROJECT_ID, GCP_LOCATION, GOOGLE_APPLICATION_CREDENTIALS")
 	}
 
-	fmt.Printf("✅ GCP_PROJECT_ID: %s\n", projectID)
-	fmt.Printf("✅ GCP_LOCATION: %s\n", location)
-	fmt.Printf("✅ GOOGLE_APPLICATION_CREDENTIALS: %s\n", credsFile)
-
-	// Check if credentials file exists
-	if _, err := os.Stat(credsFile); os.IsNotExist(err) {
-		log.Fatalf("❌ Credentials file not found: %s", credsFile)
-	}
-	fmt.Printf("✅ Credentials file exists: %s\n", credsFile)
-
-	// Test 3: Connect to Redis
-	fmt.Println("\n3. Testing Redis connection...")
+	// Connect Redis
 	rdb := chunk_retriever.Connect()
-	if rdb == nil {
-		log.Fatal("❌ Failed to connect to Redis")
-	}
-	fmt.Println("✅ Redis connection successful")
 
-	// Test 4: Initialize Embedder
-	fmt.Println("\n4. Testing embedder initialization...")
-	ctx := context.Background()
-	model := "gemini-embedding-001"
-	endpoint := fmt.Sprintf("projects/%s/locations/%s/publishers/google/models/%s", projectID, location, model)
-
-	fmt.Printf("   Model endpoint: %s\n", endpoint)
-
-	embedClient, err := embedder.EmbedderClient(ctx, credsFile, rdb, endpoint)
-	if err != nil {
-		log.Fatalf("❌ Failed to create embedder client: %v", err)
-	}
-	fmt.Println("✅ Embedder client initialized successfully")
-
-	// Test 5: Test query embedding
-	fmt.Println("\n5. Testing query embedding...")
-	query := "What does build_index.py do?"
-	fmt.Printf("Query: '%s'\n", query)
-
-	queryEmbedding, err := embedClient.EmbedQuery(query)
-	if err != nil {
-		log.Fatalf("❌ Query embedding failed: %v", err)
-	}
-
-	fmt.Printf("✅ Query embedded successfully! Vector length: %d\n", len(queryEmbedding))
-	if len(queryEmbedding) >= 5 {
-		fmt.Printf("   First 5 values: [%f, %f, %f, %f, %f]\n",
-			queryEmbedding[0], queryEmbedding[1], queryEmbedding[2], queryEmbedding[3], queryEmbedding[4])
-	} else {
-		fmt.Printf("   All values: %v\n", queryEmbedding)
-	}
-
-	// Test 6: Get Redis index
-	fmt.Println("\n6. Testing Redis index retrieval...")
 	indexName, err := chunk_retriever.GetIndexName(rdb)
 	if err != nil {
-		log.Fatalf("❌ Failed to get index name: %v", err)
+		log.Fatalf("Failed to discover index name: %v", err)
 	}
-	fmt.Printf("✅ Using index: %s\n", indexName)
+	log.Printf("Using index name: %s", indexName)
 
-	// Test 7: Test vector similarity search
-	fmt.Println("\n7. Testing vector similarity search...")
-	chunkQuery := chunk_retriever.PrepareQuery(query, 10, indexName)
+	ctx := context.Background()
 
-	fmt.Printf("   TopK: %d\n", chunkQuery.TopK)
-	fmt.Printf("   Index: %s\n", chunkQuery.IndexName)
-
-	// Run retrieval (debug prints removed)
-	chunks, err := chunk_retriever.RetrieveChunks(rdb, chunkQuery, queryEmbedding)
+	// Embedder client
+	embeddingModel := "text-embedding-005"
+	emb, err := embedder.EmbedderClient(ctx, creds, rdb, embeddingModel)
 	if err != nil {
-		log.Fatalf("❌ Vector similarity search failed: %v", err)
+		log.Fatalf("Failed to init embedder: %v", err)
 	}
 
-	// Test 8: Analyze results
-	fmt.Println("\n8. Analyzing search results...")
-	fmt.Printf("✅ Found %d chunks for query: '%s'\n", len(chunks), query)
+	queries := []string{
+		"What does embedder.go do?",
+		"How are files chunked?",
+		"Explain the Redis storage schema.",
+		"How are query embeddings generated?",
+	}
 
-	if len(chunks) == 0 {
-		fmt.Println("⚠️  No chunks found - this might be expected if:")
-		fmt.Println("   - No data exists in Redis")
-		fmt.Println("   - The index is empty")
-		fmt.Println("   - The query doesn't match any existing data")
-		fmt.Println("\n💡 To populate Redis with data, you can:")
-		fmt.Println("   - Use the embedder to process files in your directory")
-		fmt.Println("   - Create a Redis index with some test data")
-	} else {
-		fmt.Println("\n📋 Retrieved chunks:")
-		for i, chunk := range chunks {
-			fmt.Printf("\n--- Chunk %d ---\n", i+1)
-			fmt.Printf("Text: %s\n", chunk.Text)
-			fmt.Printf("Score: %f\n", chunk.Score)
-			fmt.Printf("Metadata: %+v\n", chunk.Metadata)
+	topK := 5
+	concurrency := 4
 
-			// Validate chunk structure
-			if chunk.Text == "" {
-				fmt.Printf("⚠️  Warning: Chunk %d has empty text\n", i+1)
+	overallStart := time.Now() // start timing for all queries
+	results := retrieveConcurrent(ctx, emb, rdb, indexName, queries, topK, concurrency)
+	overallElapsed := time.Since(overallStart)
+
+	fmt.Printf("\n=== All queries completed in %s ===\n", overallElapsed)
+
+	for _, r := range results {
+		if r.Err != nil {
+			fmt.Printf("\n--- Query: %q (ERROR) ---\n%v\n", r.Query, r.Err)
+			continue
+		}
+		fmt.Printf("\n--- Query: %q | %d chunks | %s | index=%s ---\n",
+			r.Query, len(r.Chunks), r.Elapsed, r.IndexName)
+		if len(r.Chunks) == 0 {
+			fmt.Println("No chunks retrieved.")
+			continue
+		}
+		for i, ch := range r.Chunks {
+			file := ch.Metadata["file"]
+			fmt.Printf("[#%d score=%.4f file=%s]\n%s\n---\n", i, ch.Score, file, ch.Text)
+		}
+	}
+}
+
+// retrieveConcurrent runs multiple semantic retrievals concurrently.
+func retrieveConcurrent(
+	ctx context.Context,
+	emb *embedder.Embedder,
+	rdb *redis.Client, // using any to avoid tight coupling to redis.Client type signature here
+	indexName string,
+	queries []string,
+	topK int,
+	maxParallel int,
+) []QueryResult {
+
+	type task struct {
+		Query string
+	}
+	tasks := make(chan task)
+	resultsCh := make(chan QueryResult)
+
+	var wg sync.WaitGroup
+
+	worker := func() {
+		defer wg.Done()
+		for t := range tasks {
+			start := time.Now()
+			// Embed query
+			queryVec, err := emb.EmbedQuery(t.Query)
+			if err != nil {
+				resultsCh <- QueryResult{Query: t.Query, Err: fmt.Errorf("embed error: %w", err)}
+				continue
 			}
-			if chunk.Metadata == nil {
-				fmt.Printf("⚠️  Warning: Chunk %d has nil metadata\n", i+1)
+			// Prepare + retrieve
+			cq := chunk_retriever.PrepareQuery(t.Query, topK, indexName)
+			chunks, err := chunk_retriever.RetrieveChunks(rdb, cq, queryVec)
+			if err != nil {
+				resultsCh <- QueryResult{Query: t.Query, Err: fmt.Errorf("retrieve error: %w", err)}
+				continue
 			}
-			if chunk.Score < 0 || chunk.Score > 1 {
-				fmt.Printf("⚠️  Warning: Chunk %d has unusual score: %f (expected 0-1)\n", i+1, chunk.Score)
+			// Sort by Score ascending (lower = more similar per your struct)
+			sort.Slice(chunks, func(i, j int) bool {
+				return chunks[i].Score < chunks[j].Score
+			})
+			elapsed := time.Since(start)
+			resultsCh <- QueryResult{
+				Query:     t.Query,
+				Chunks:    chunks,
+				Elapsed:   elapsed,
+				IndexName: indexName,
 			}
 		}
 	}
 
-	fmt.Println("\n🎉 Testing completed successfully!")
-	fmt.Println("\n📝 Summary:")
-	fmt.Printf("   - Environment variables: ✅ Loaded\n")
-	fmt.Printf("   - Embedder: ✅ Working\n")
-	fmt.Printf("   - Redis connection: ✅ Working\n")
-	fmt.Printf("   - Vector similarity search: ✅ Working\n")
-	fmt.Printf("   - Chunks found: %d\n", len(chunks))
-
-	if len(chunks) == 0 {
-		fmt.Println("\n🔧 Next steps:")
-		fmt.Println("   1. Ensure Redis has data in the index")
-		fmt.Println("   2. Check that the index contains relevant documents")
-		fmt.Println("   3. Verify the embedding model is working correctly")
+	// Start workers
+	if maxParallel <= 0 {
+		maxParallel = 1
 	}
+	if maxParallel > len(queries) {
+		maxParallel = len(queries)
+	}
+	wg.Add(maxParallel)
+	for i := 0; i < maxParallel; i++ {
+		go worker()
+	}
+
+	// Feed tasks
+	go func() {
+		for _, q := range queries {
+			tasks <- task{Query: q}
+		}
+		close(tasks)
+	}()
+
+	// Close results channel when workers done
+	go func() {
+		wg.Wait()
+		close(resultsCh)
+	}()
+
+	var collected []QueryResult
+	for r := range resultsCh {
+		collected = append(collected, r)
+	}
+	return collected
 }

@@ -270,9 +270,9 @@ func toString(v any) string {
 func RetrieveWorker(
 	rdb *redis.Client,
 	queryCh <-chan struct {
-	Query     ChunkQuery
-	Embedding []float32
-},
+		Query     ChunkQuery
+		Embedding []float32
+	},
 	resultCh chan<- []Chunk,
 	wg *sync.WaitGroup,
 	errCh chan<- error,
