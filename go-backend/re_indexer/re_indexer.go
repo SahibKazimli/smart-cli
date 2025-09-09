@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"os"
 	"path/filepath"
 
 	"github.com/redis/go-redis/v9"
@@ -51,6 +52,25 @@ func (i *Indexer) IndexFile(ctx context.Context, path string, chunkSize int, ove
 		if err := i.storeChunk(ctx, path, chunk.Index, chunk.Text, vector); err != nil {
 			fmt.Printf("Warning: failed storing chunk %d: %v\n", chunk.Index, err)
 			continue
+		}
+	}
+	return nil
+}
+
+func (i *Indexer) ReIndexDirectory(ctx context.Context, dir string, chunkSize, overlap int) error {
+	files, err := filepath.Glob(filepath.Join(dir, "*"))
+	if err != nil {
+		return err
+	}
+	for _, file := range files {
+		// Skip directories
+		info, err := os.Stat(file)
+		if err != nil || info.IsDir() {
+			continue
+		}
+		fmt.Printf("Indexing file: %s\n", file)
+		if err := i.IndexFile(ctx, file, chunkSize, overlap); err != nil {
+			fmt.Printf("Warning: failed indexing file %s: %v\n", file, err)
 		}
 	}
 	return nil

@@ -164,6 +164,44 @@ func RetrieveChunks(rdb *redis.Client, query ChunkQuery, queryEmbedding []float3
 	return parseSearchResults(res)
 }
 
+func concurrentChunkRetrieval(rdb *redis.Client,
+	queries []ChunkQuery,
+	embeddings [][]float32,
+	numWorkers int,
+) ([]Chunk, error) {
+
+	// Create channels
+	queryCh := make(chan struct {
+		Query     ChunkQuery
+		Embedding []float32
+	})
+	resultCh := make(chan []Chunk)
+	errCh := make(chan error)
+
+	// Spawn workers
+	var wg sync.WaitGroup
+	numWorkers = 7
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go RetrieveWorker(rdb, queryCh, resultCh, &wg, errCh)
+	}
+	go func() {
+		wg.Wait()
+		close(resultCh)
+		close(errCh)
+	}()
+	var allChunks []Chunk
+	for res := range resultCh {
+		allChunks = append(allChunks, res...)
+	}
+	var resultErr error
+	for err := range errCh {
+		fmt.Println("Warning:", err)
+		resultErr = err
+	}
+	return allChunks, resultErr
+}
+
 func parseSearchResults(res any) ([]Chunk, error) {
 	out := []Chunk{}
 
