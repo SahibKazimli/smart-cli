@@ -53,7 +53,7 @@ func main() {
 	log.Println("✓ Embedder initialized")
 
 	// Initialize LLM agent
-	generationModel := "gemini-2.5-pro"
+	generationModel := "gemini-1.5-pro"
 	log.Printf("Initializing LLM agent with model: %s", generationModel)
 	agent, err := generator.NewAgent(ctx, generationModel)
 	if err != nil {
