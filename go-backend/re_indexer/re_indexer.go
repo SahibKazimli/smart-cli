@@ -7,8 +7,10 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/redis/go-redis/v9"
+	"smart-cli/go-backend/chunk_retriever"
 	"smart-cli/go-backend/chunker"
 	"smart-cli/go-backend/embedder"
 )
@@ -18,6 +20,8 @@ type Indexer struct {
 	Embedder  *embedder.Embedder
 	Root      string
 	IndexName string
+
+	ensureOnce sync.Once
 }
 
 func NewIndexer(redisClient *redis.Client, emb *embedder.Embedder, root string, indexName string) *Indexer {
@@ -35,6 +39,15 @@ func NewIndexer(redisClient *redis.Client, emb *embedder.Embedder, root string, 
 	}
 }
 
+func (i *Indexer) ensureIndex(dim int) error {
+	var err error
+	i.ensureOnce.Do(func() {
+		prefix := i.IndexName + ":"
+		err = chunk_retriever.EnsureIndex(i.Redis, i.IndexName, prefix, dim)
+	})
+	return err
+}
+
 func (i *Indexer) IndexFile(ctx context.Context, path string, chunkSize int, overlap int) error {
 	chunks, err := chunker.SplitFile(path, chunkSize, overlap)
 	if err != nil {
@@ -48,6 +61,10 @@ func (i *Indexer) IndexFile(ctx context.Context, path string, chunkSize int, ove
 		if err != nil {
 			fmt.Printf("Warning: failed embedding chunk %d: %v\n", chunk.Index, err)
 			continue
+		}
+		// Ensure the vector index exists once, using the first vector's dimension
+		if err := i.ensureIndex(len(vector)); err != nil {
+			return fmt.Errorf("failed to ensure index %q: %w", i.IndexName, err)
 		}
 		if err := i.storeChunk(ctx, path, chunk.Index, chunk.Text, vector); err != nil {
 			fmt.Printf("Warning: failed storing chunk %d: %v\n", chunk.Index, err)
