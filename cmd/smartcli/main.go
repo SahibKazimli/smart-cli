@@ -1,18 +1,10 @@
 package main
 
 import (
-	"context"
-	"flag"
 	"fmt"
+	"github.com/spf13/cobra"
 	"log"
 	"os"
-	"strings"
-
-	"github.com/spf13/cobra"
-	"smart-cli/go-backend/chunk_retriever"
-	"smart-cli/go-backend/embedder"
-	"smart-cli/go-backend/generator"
-	"smart-cli/go-backend/re_indexer"
 )
 
 func main() {
@@ -22,7 +14,7 @@ func main() {
 		Long:  "Modular AI-enhanced command line interface for coding assistance",
 	}
 	// Add the code review command
-	rootCmd.AddCommand()
+	rootCmd.AddCommand(createCodeReviewCmd())
 
 	// And more commands will be added later
 	rootCmd.AddCommand()
@@ -54,6 +46,41 @@ func mustGCP() (projectID, location, creds string) {
 	return
 }
 
-func codeReview() {
+func createCodeReviewCmd() *cobra.Command {
+	var filePath string
+	var detailLevel string
 
+	codeReviewCmd := &cobra.Command{
+		Use:   "review",
+		Short: "Review code for improvements",
+		Long:  `Analyze code for potential bugs, style improvements, and optimization opportunities.`,
+		Run: func(cmd *cobra.Command, args []string) {
+			// If no file path is provided but there are arguments, use the first argument
+			if filePath == "" && len(args) > 0 {
+				filePath = args[0]
+			}
+
+			if filePath == "" {
+				fmt.Println("Error: Please provide a file to review")
+				return
+			}
+
+			// Call the function that will handle the code review
+
+		},
+	}
+
+	// Add flags specific to code review
+	codeReviewCmd.Flags().StringVarP(&filePath, "file", "f", "", "Path to file for code review")
+	codeReviewCmd.Flags().StringVarP(&detailLevel, "detail", "d", "medium", "Level of review detail (low, medium, high)")
+
+	return codeReviewCmd
+}
+
+func performCodeReview(filePath string, detailLevel string) {
+	fmt.Printf("Performing %s level code review for: %s\n", detailLevel, filePath)
+	// TODO: Implement the code review logic and call functions in generator.go
+	// 1. Read the file contents
+	// 2. Call the AI
+	// 3. Format and display results
 }
