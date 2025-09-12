@@ -205,43 +205,16 @@ func concurrentChunkRetrieval(rdb *redis.Client,
 func parseSearchResults(res any) ([]Chunk, error) {
 	out := []Chunk{}
 
-	// RESP3: Redis Stack may return a map with "results".
+	// RESP3
 	if m, ok := res.(map[interface{}]interface{}); ok {
 		resultsAny := getMapVal(m, "results")
 		resultsArr, ok := resultsAny.([]interface{})
 		if !ok {
 			return out, nil
 		}
-		for _, item := range resultsArr {
-			itMap, ok := item.(map[interface{}]interface{})
-			if !ok {
-				continue
-			}
-			extraAny := getMapVal(itMap, "extra_attributes")
-			extra, ok := extraAny.(map[interface{}]interface{})
-			if !ok {
-				continue
-			}
-			ch := Chunk{Metadata: map[string]string{}}
-			for k, v := range extra {
-				ks := toString(k)
-				vs := toString(v)
-				switch ks {
-				case "text":
-					ch.Text = vs
-				case "vector_score":
-					if f, err := strconv.ParseFloat(vs, 64); err == nil {
-						ch.Score = f
-					}
-				default:
-					ch.Metadata[ks] = vs
-				}
-			}
-			out = append(out, ch)
-		}
-		return out, nil
+		appendChunks(resultsArr)
 	}
-	return out, fmt.Errorf("unexpected FT.SEARCH response type: %T", res)
+	return out, nil
 }
 
 func getMapVal(m map[interface{}]interface{}, key string) any {
@@ -264,15 +237,47 @@ func toString(v any) string {
 	}
 }
 
+func appendChunks(resultsArr []interface{}) []Chunk {
+	out := []Chunk{}
+	for _, item := range resultsArr {
+		itMap, ok := item.(map[interface{}]interface{})
+		if !ok {
+			continue
+		}
+		extraAny := getMapVal(itMap, "extra_attributes")
+		extra, ok := extraAny.(map[interface{}]interface{})
+		if !ok {
+			continue
+		}
+		ch := Chunk{Metadata: map[string]string{}}
+		for k, v := range extra {
+			ks := toString(k)
+			vs := toString(v)
+			switch ks {
+			case "text":
+				ch.Text = vs
+			case "vector_score":
+				if f, err := strconv.ParseFloat(vs, 64); err == nil {
+					ch.Score = f
+				}
+			default:
+				ch.Metadata[ks] = vs
+			}
+		}
+		out = append(out, ch)
+	}
+	return out
+}
+
 // ===== Chunk retriever workers =====
 
 // RetrieveWorker listens for queries on queryCh, runs retrieval, and sends results.
 func RetrieveWorker(
 	rdb *redis.Client,
 	queryCh <-chan struct {
-		Query     ChunkQuery
-		Embedding []float32
-	},
+	Query     ChunkQuery
+	Embedding []float32
+},
 	resultCh chan<- []Chunk,
 	wg *sync.WaitGroup,
 	errCh chan<- error,
