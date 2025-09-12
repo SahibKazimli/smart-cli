@@ -4,9 +4,9 @@ go 1.24.5
 
 require (
 	cloud.google.com/go/aiplatform v1.90.0
-	cloud.google.com/go/vertexai v0.15.0
 	github.com/joho/godotenv v1.5.1
 	github.com/redis/go-redis/v9 v9.12.1
+	github.com/spf13/cobra v1.10.1
 	google.golang.org/api v0.248.0
 	google.golang.org/genai v1.22.0
 	google.golang.org/protobuf v1.36.7
@@ -29,6 +29,8 @@ require (
 	github.com/googleapis/enterprise-certificate-proxy v0.3.6 // indirect
 	github.com/googleapis/gax-go/v2 v2.15.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/spf13/pflag v1.0.9 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.61.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.61.0 // indirect

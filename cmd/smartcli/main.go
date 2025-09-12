@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/spf13/cobra"
 	"smart-cli/go-backend/chunk_retriever"
 	"smart-cli/go-backend/embedder"
 	"smart-cli/go-backend/generator"
@@ -15,11 +16,22 @@ import (
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		usage()
+	var rootCmd = &cobra.Command{
+		Use:   "smartcli",
+		Short: "AI-enhanced command line interface",
+		Long:  "Modular AI-enhanced command line interface for coding assistance",
+	}
+	// Add the code review command
+	rootCmd.AddCommand()
+
+	// And more commands will be added later
+	rootCmd.AddCommand()
+	rootCmd.AddCommand()
+
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Println(err)
 		os.Exit(1)
 	}
-
 }
 
 func usage() {
@@ -40,4 +52,8 @@ func mustGCP() (projectID, location, creds string) {
 		log.Fatal("Please set GCP_PROJECT_ID, GCP_LOCATION, and GOOGLE_APPLICATION_CREDENTIALS")
 	}
 	return
+}
+
+func codeReview() {
+
 }
