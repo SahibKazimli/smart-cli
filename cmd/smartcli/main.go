@@ -2,9 +2,14 @@ package main
 
 import (
 	"fmt"
+	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cobra"
 	"log"
 	"os"
+	"path/filepath"
+	"smart-cli/go-backend/chunk_retriever"
+	"smart-cli/go-backend/file_resolver"
+	"strings"
 )
 
 func main() {
@@ -80,7 +85,25 @@ func createCodeReviewCmd() *cobra.Command {
 func performCodeReview(filePath string, detailLevel string) {
 	fmt.Printf("Performing %s level code review for: %s\n", detailLevel, filePath)
 	// TODO: Implement the code review logic and call functions in generator.go
-	// 1. Read the file contents
+	// 1. Run the vector similarity search
 	// 2. Call the AI
 	// 3. Format and display results
+	retrievedChunks := chunk_retriever.ConcurrentChunkRetrieval(rdb*redis.Client{}, quer)
+
+}
+
+func getCodeFilesFromDir(dir string) ([]string, error) {
+	var files []string
+
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && file_resolver.IsCodeFile(path) {
+			files = append(files, path)
+		}
+		return nil
+	})
+
+	return files, err
 }

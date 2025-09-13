@@ -57,7 +57,7 @@ func shouldSkipDir(name string) bool {
 }
 
 // Helper to see if it's a code file
-func isCodeFile(name string) bool {
+func IsCodeFile(name string) bool {
 	ln := strings.ToLower(name)
 	switch {
 	case strings.HasSuffix(ln, ".go"),

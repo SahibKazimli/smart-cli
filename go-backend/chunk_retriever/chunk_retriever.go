@@ -164,7 +164,7 @@ func RetrieveChunks(rdb *redis.Client, query ChunkQuery, queryEmbedding []float3
 	return parseSearchResults(res)
 }
 
-func concurrentChunkRetrieval(rdb *redis.Client,
+func ConcurrentChunkRetrieval(rdb *redis.Client,
 	queries []ChunkQuery,
 	embeddings [][]float32,
 	numWorkers int,
