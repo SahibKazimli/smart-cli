@@ -15,7 +15,6 @@ import (
 	"smart-cli/go-backend/file_resolver"
 	"smart-cli/go-backend/generator"
 	"strings"
-	"time"
 )
 
 func main() {
@@ -114,18 +113,64 @@ func getCodeFilesFromDir(dir string) ([]string, error) {
 	return files, err
 }
 
-func reviewCodeFile(ctx context.Context, gen *generator.Generator, filePath string, chunkSize int, overlap int) {
+func reviewCodeFile(
+	ctx context.Context,
+	gen *generator.Generator,
+	filePath string,
+	rdb *redis.Client,
+	detailLevel string,
+	indexName string,
+	chunkSize int,
+	overlap int,
+) {
+
 	fmt.Printf("\n--- Reviewing %s ---\n", filePath)
-	chunkQuery, err := searchQuery(filePath)
+	// Content
+	fileContent, err := getFileContent(filePath)
 	if err != nil {
-		fmt.Errorf("warning: failed to create search query")
-	}
-	// Create a generator
-	gen, err := generator.NewAgent(ctx, "gemini-1.5-pro")
-	if err != nil {
-		fmt.Errorf("warning: failed to create agent")
+		fmt.Printf("warning: cannot read file: %v\n", err)
+		return
 	}
 
+	// Embeddings
+	_, _, creds := mustGCP()
+	embedderClient, err := embedder.EmbedderClient(ctx, creds, rdb, "")
+	if err != nil {
+		fmt.Printf("warning: cannot create embedder: %v\n", err)
+		return
+	}
+	reviewEmbedding, reviewQuery := createEmbeddings(filePath, ctx, rdb, strings.ToLower(detailLevel))
+	fileEmbedding, err := embedderClient.EmbedQuery(fileContent)
+	if err != nil {
+		fmt.Printf("warning: cannot embed file content: %v\n", err)
+		return
+	}
+
+	// Queries
+	reviewChunkQuery := chunk_retriever.PrepareQuery(reviewQuery, 5, indexName)
+	fileContentQuery := chunk_retriever.PrepareQuery(fileContent, 10, indexName)
+	queries := []chunk_retriever.ChunkQuery{reviewChunkQuery, fileContentQuery}
+	embeddings := [][]float32{reviewEmbedding, fileEmbedding}
+
+	// Retrieve
+	chunks, err := chunk_retriever.ConcurrentChunkRetrieval(rdb, queries, embeddings, 10)
+	if err != nil {
+		fmt.Printf("warning: retrieval error: %v\n", err)
+	}
+	// Creating a generator
+	if gen == nil {
+		gen, err = generator.NewAgent(ctx, "gemini-1.5-pro")
+		if err != nil {
+			fmt.Printf("warning: failed to create agent: %v\n", err)
+			return
+		}
+	}
+	out, err := gen.Answer(ctx, reviewQuery, chunks)
+	if err != nil {
+		fmt.Printf("warning: failed to generate review: %v\n", err)
+		return
+	}
+	fmt.Println(out)
 }
 
 // ===== Helpers =====
@@ -151,7 +196,7 @@ func searchQuery(filePath string) (chunk_retriever.ChunkQuery, error) {
 	return chunkQuery, nil
 }
 
-func createEmbeddings(filePath string, ctx context.Context, rdb *redis.Client, detailLevel string) []float32 {
+func createEmbeddings(filePath string, ctx context.Context, rdb *redis.Client, detailLevel string) ([]float32, string) {
 	// Create an embedder
 	_, _, creds := mustGCP()
 	embedderClient, err := embedder.EmbedderClient(ctx, creds, rdb, "")
@@ -182,5 +227,13 @@ func createEmbeddings(filePath string, ctx context.Context, rdb *redis.Client, d
 	if err != nil {
 		fmt.Printf("Error generating query embedding: %v\n", err)
 	}
-	return queryEmbedding
+	return queryEmbedding, reviewQuery
+}
+
+func getFileContent(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
 }

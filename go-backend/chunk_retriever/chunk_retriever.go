@@ -180,7 +180,6 @@ func ConcurrentChunkRetrieval(rdb *redis.Client,
 
 	// Spawn workers
 	var wg sync.WaitGroup
-	numWorkers = 7
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
 		go RetrieveWorker(rdb, queryCh, resultCh, &wg, errCh)
@@ -275,9 +274,9 @@ func appendChunks(resultsArr []interface{}) []Chunk {
 func RetrieveWorker(
 	rdb *redis.Client,
 	queryCh <-chan struct {
-		Query     ChunkQuery
-		Embedding []float32
-	},
+	Query     ChunkQuery
+	Embedding []float32
+},
 	resultCh chan<- []Chunk,
 	wg *sync.WaitGroup,
 	errCh chan<- error,
