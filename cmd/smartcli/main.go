@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cobra"
@@ -8,7 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"smart-cli/go-backend/chunk_retriever"
+	"smart-cli/go-backend/chunker"
 	"smart-cli/go-backend/file_resolver"
+	"smart-cli/go-backend/generator"
 	"strings"
 )
 
@@ -106,4 +109,27 @@ func getCodeFilesFromDir(dir string) ([]string, error) {
 	})
 
 	return files, err
+}
+
+func reviewCodeFile(ctx context.Context, gen *generator.Generator, filePath string, chunkSize int, overlap int) {
+	fmt.Printf("\n--- Reviewing %s ---\n", filePath)
+
+	// Read and chunk the file
+	fileChunks, err := chunker.SplitFile(filePath, chunkSize, overlap)
+	if err != nil {
+		fmt.Printf("Error processing file %s: %v\n", filePath, err)
+		return
+	}
+
+	if len(fileChunks) == 0 {
+		fmt.Printf("No content to review in %s\n", filePath)
+		return
+	}
+
+	// Prepare content for the AI
+	var fullContent string
+	for _, chunk := range fileChunks {
+		fullContent += chunk.Text
+	}
+
 }
