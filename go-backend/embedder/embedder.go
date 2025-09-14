@@ -206,7 +206,7 @@ func parsePrediction(pred *structpb.Value) ([]float32, error) {
 	return embedding, nil
 }
 
-func (e *Embedder) embedContent(content string) ([]float32, error) {
+func (e *Embedder) EmbedContent(content string) ([]float32, error) {
 	instance, err := structpb.NewStruct(map[string]interface{}{
 		"content": content,
 	})
@@ -307,7 +307,7 @@ func (e *Embedder) storeEmbeddingsInRedis(prefix string, embeddings []FileEmbedd
 // ===== Public API =====
 
 func (e *Embedder) EmbedText(content string) ([]float32, error) {
-	return e.embedContent(content)
+	return e.EmbedContent(content)
 }
 
 /*
@@ -414,7 +414,7 @@ func EmbedFileWorker(e *Embedder, file FileData, ch chan<- FileEmbedding, _ *syn
 		return
 	}
 	// embed content
-	emb, err := e.embedContent(file.Content)
+	emb, err := e.EmbedContent(file.Content)
 	if err != nil {
 		errCh <- fmt.Errorf("warning: embedding failed for file: %s: %w", file.Path, err)
 		return

@@ -93,8 +93,66 @@ func performCodeReview(filePath string, detailLevel string) {
 	// 1. Run the vector similarity search
 	// 2. Call the AI
 	// 3. Format and display results
-	retrievedChunks := chunk_retriever.ConcurrentChunkRetrieval(rdb*redis.Client{}, quer)
 
+	// Connect to Redis and resolve index name
+	rdb := chunk_retriever.Connect()
+	defer func() { _ = rdb.Close() }()
+
+	fileContent, err := getFileContent(filePath)
+	if err != nil {
+		fmt.Errorf("warning: failed to get file content")
+	}
+
+	indexName, err := chunk_retriever.GetIndexName(rdb)
+	if err != nil {
+		fmt.Printf("Error: failed to get index name: %v\n", err)
+		return
+	}
+	// Build embeddings for two queries: review intent + file content
+	ctx := context.Background()
+	_, _, creds := mustGCP()
+	embedderClient, err := embedder.EmbedderClient(ctx, creds, rdb, "")
+	if err != nil {
+		fmt.Printf("Error creating embedder: %v\n", err)
+		return
+	}
+
+	// Use helpers to craft the review query and its embedding
+	reviewEmbedding, reviewQuery := createEmbeddings(filePath, ctx, rdb, strings.ToLower(detailLevel))
+	reviewChunkQuery := chunk_retriever.PrepareQuery(reviewQuery, 5, indexName)
+
+	// Embed the actual file text
+	fileEmbedding, err := embedderClient.EmbedContent(fileContent)
+	if err != nil {
+		fmt.Printf("Error generating file-content embedding: %v\n", err)
+		return
+	}
+	fileContentQuery := chunk_retriever.PrepareQuery(fileContent, 10, indexName)
+
+	queries := []chunk_retriever.ChunkQuery{reviewChunkQuery, fileContentQuery}
+	embeddings := [][]float32{reviewEmbedding, fileEmbedding}
+
+	// Concurrent chunk retrieval
+	retrievedChunks, err := chunk_retriever.ConcurrentChunkRetrieval(rdb, queries, embeddings, 10)
+	if err != nil {
+		fmt.Printf("Warning: retrieval error: %v\n", err)
+	}
+
+	fmt.Printf("Retrieved %d context chunks\n", len(retrievedChunks))
+
+	// Generate answer/review
+	gen, err := generator.NewAgent(ctx, "gemini-1.5-pro")
+	if err != nil {
+		fmt.Printf("warning: failed to create agent: %v\n", err)
+		return
+	}
+	answer, err := gen.Answer(ctx, reviewQuery, retrievedChunks)
+	if err != nil {
+		fmt.Printf("warning: failed to generate review: %v\n", err)
+		return
+	}
+	fmt.Println("\n===== Review =====")
+	fmt.Println(answer)
 }
 
 func getCodeFilesFromDir(dir string) ([]string, error) {
@@ -125,13 +183,12 @@ func reviewCodeFile(
 ) {
 
 	fmt.Printf("\n--- Reviewing %s ---\n", filePath)
-	// Content
+	// File content
 	fileContent, err := getFileContent(filePath)
 	if err != nil {
 		fmt.Printf("warning: cannot read file: %v\n", err)
 		return
 	}
-
 	// Embeddings
 	_, _, creds := mustGCP()
 	embedderClient, err := embedder.EmbedderClient(ctx, creds, rdb, "")
@@ -145,14 +202,13 @@ func reviewCodeFile(
 		fmt.Printf("warning: cannot embed file content: %v\n", err)
 		return
 	}
-
-	// Queries
+	// Creating queries
 	reviewChunkQuery := chunk_retriever.PrepareQuery(reviewQuery, 5, indexName)
 	fileContentQuery := chunk_retriever.PrepareQuery(fileContent, 10, indexName)
 	queries := []chunk_retriever.ChunkQuery{reviewChunkQuery, fileContentQuery}
 	embeddings := [][]float32{reviewEmbedding, fileEmbedding}
 
-	// Retrieve
+	// Retrieve chunks concurrently
 	chunks, err := chunk_retriever.ConcurrentChunkRetrieval(rdb, queries, embeddings, 10)
 	if err != nil {
 		fmt.Printf("warning: retrieval error: %v\n", err)
