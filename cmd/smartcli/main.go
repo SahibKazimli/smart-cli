@@ -5,14 +5,17 @@ import (
 	"fmt"
 	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cobra"
+	"google.golang.org/api/content/v2"
 	"log"
 	"os"
 	"path/filepath"
 	"smart-cli/go-backend/chunk_retriever"
 	"smart-cli/go-backend/chunker"
+	"smart-cli/go-backend/embedder"
 	"smart-cli/go-backend/file_resolver"
 	"smart-cli/go-backend/generator"
 	"strings"
+	"time"
 )
 
 func main() {
@@ -113,23 +116,71 @@ func getCodeFilesFromDir(dir string) ([]string, error) {
 
 func reviewCodeFile(ctx context.Context, gen *generator.Generator, filePath string, chunkSize int, overlap int) {
 	fmt.Printf("\n--- Reviewing %s ---\n", filePath)
-
-	// Read and chunk the file
-	fileChunks, err := chunker.SplitFile(filePath, chunkSize, overlap)
+	chunkQuery, err := searchQuery(filePath)
 	if err != nil {
-		fmt.Printf("Error processing file %s: %v\n", filePath, err)
-		return
+		fmt.Errorf("warning: failed to create search query")
+	}
+	// Create a generator
+	gen, err := generator.NewAgent(ctx, "gemini-1.5-pro")
+	if err != nil {
+		fmt.Errorf("warning: failed to create agent")
 	}
 
-	if len(fileChunks) == 0 {
-		fmt.Printf("No content to review in %s\n", filePath)
-		return
+}
+
+// ===== Helpers =====
+
+func searchQuery(filePath string) (chunk_retriever.ChunkQuery, error) {
+	// Connect to Redis for retrieving relevant chunks
+	rdb := chunk_retriever.Connect()
+
+	// Get the index name
+	indexName, err := chunk_retriever.GetIndexName(rdb)
+	if err != nil {
+		return chunk_retriever.ChunkQuery{}, fmt.Errorf("failed to get index name: %v", err)
 	}
 
-	// Prepare content for the AI
-	var fullContent string
-	for _, chunk := range fileChunks {
-		fullContent += chunk.Text
+	// Prepare query based on file content
+	filename := filepath.Base(filePath)
+
+	// Create a review query based on the file content
+	query := fmt.Sprintf("Review this %s code for bugs, improvements, and best practices: %s", filename)
+
+	// Prepare chunk query
+	chunkQuery := chunk_retriever.PrepareQuery(query, 10, indexName)
+	return chunkQuery, nil
+}
+
+func createEmbeddings(filePath string, ctx context.Context, rdb *redis.Client, detailLevel string) []float32 {
+	// Create an embedder
+	_, _, creds := mustGCP()
+	embedderClient, err := embedder.EmbedderClient(ctx, creds, rdb, "")
+	if err != nil {
+		fmt.Printf("Error creating embedder: %v\n", err)
 	}
 
+	// Generate query based on file content and detail level
+	fileExt := filepath.Ext(filePath)
+	language := strings.TrimPrefix(fileExt, ".")
+
+	// Adjust query based on detail level
+	var reviewDetail string
+	switch detailLevel {
+	case "low":
+		reviewDetail = "Provide a basic review focusing only on major issues"
+	case "high":
+		reviewDetail = "Provide a detailed, thorough review covering all aspects"
+	default:
+		reviewDetail = "Provide a balanced review of important issues"
+	}
+
+	reviewQuery := fmt.Sprintf("Review this %s code file %s. %s:",
+		language, filepath.Base(filePath), reviewDetail)
+
+	// Generate embedding for the query
+	queryEmbedding, err := embedderClient.EmbedQuery(reviewQuery)
+	if err != nil {
+		fmt.Printf("Error generating query embedding: %v\n", err)
+	}
+	return queryEmbedding
 }
