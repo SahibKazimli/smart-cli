@@ -36,7 +36,7 @@ func performCodeReview(filePath string, detailLevel string, userQuery string) {
 		fmt.Printf("Error creating embedder: %v\n", err)
 		return
 	}
-	queryEmbedding, retrievalQuery := createEmbeddings(userQuery, embedderClient)
+	queryEmbedding := createEmbedding(userQuery, embedderClient)
 	chunkQuery := chunk_retriever.PrepareQuery(userQuery, 10, indexName)
 
 	// Concurrent chunk retrieval
@@ -52,13 +52,18 @@ func performCodeReview(filePath string, detailLevel string, userQuery string) {
 
 	fmt.Printf("Retrieved %d context chunks\n", len(retrievedChunks))
 
+	// Create a prompt that asks the LLM to answer the user's specific question
+	generationPrompt := fmt.Sprintf(`Based on the provided code context, 
+						please answer this question about the file '%s': %s\n\n
+						Provide a %s level of detail in your answer.`, filePath, userQuery, detailLevel)
+
 	// Generate answer/review
 	gen, err := generator.NewAgent(ctx, "gemini-1.5-pro")
 	if err != nil {
 		fmt.Printf("warning: failed to create agent: %v\n", err)
 		return
 	}
-	answer, err := gen.Answer(ctx, retrievalQuery, retrievedChunks)
+	answer, err := gen.Answer(ctx, generationPrompt, retrievedChunks)
 	if err != nil {
 		fmt.Printf("warning: failed to generate review: %v\n", err)
 		return
@@ -69,12 +74,12 @@ func performCodeReview(filePath string, detailLevel string, userQuery string) {
 
 // ===== Helpers =====
 
-func createEmbeddings(userQuery string, embedderClient *embedder.Embedder) ([]float32, string) {
+func createEmbedding(userQuery string, embedderClient *embedder.Embedder) []float32 {
 	queryEmbedding, err := embedderClient.EmbedQuery(userQuery)
 	if err != nil {
 		fmt.Printf("Error generating query embedding: %v\n", err)
 	}
-	return queryEmbedding, userQuery
+	return queryEmbedding
 }
 
 func getCodeFilesFromDir(dir string) ([]string, error) {

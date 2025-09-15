@@ -9,16 +9,17 @@ import (
 
 func main() {
 	var rootCmd = &cobra.Command{
-		Use:   "smartcli",
-		Short: "AI-enhanced command line interface",
-		Long:  "Modular AI-enhanced command line interface for coding assistance",
+		Use:     "smartcli",
+		Short:   "AI-enhanced command line interface",
+		Long:    "Modular AI-enhanced command line interface for coding assistance",
+		Example: `smartcli review -f embedder.go -q "what does this file do?"`,
 	}
 	// Add the code review command
 	rootCmd.AddCommand(createCodeReviewCmd())
 
 	// And more commands will be added later
-	rootCmd.AddCommand()
-	rootCmd.AddCommand()
+	// rootCmd.AddCommand()
+	// rootCmd.AddCommand()
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
@@ -36,19 +37,10 @@ func usage() {
 	fmt.Println("  smartcli ask   --q \"your question\" [--topk 5] [--generation-model gemini-1.5-pro] [--embedding-model text-embedding-005] [--show-context]")
 }
 
-func mustGCP() (projectID, location, creds string) {
-	projectID = os.Getenv("GCP_PROJECT_ID")
-	location = os.Getenv("GCP_LOCATION")
-	creds = os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
-	if projectID == "" || location == "" || creds == "" {
-		log.Fatal("Please set GCP_PROJECT_ID, GCP_LOCATION, and GOOGLE_APPLICATION_CREDENTIALS")
-	}
-	return
-}
-
 func createCodeReviewCmd() *cobra.Command {
 	var filePath string
 	var detailLevel string
+	var userQuery string
 
 	codeReviewCmd := &cobra.Command{
 		Use:   "review",
@@ -64,8 +56,15 @@ func createCodeReviewCmd() *cobra.Command {
 				fmt.Println("Error: Please provide a file to review")
 				return
 			}
+			// Require a user query
+			if userQuery == "" {
+				fmt.Println("Error: Please provide a question with -q or --query")
+				fmt.Println("Example: smartcli review -f embedder.go -q \"what does this file do?\"")
+				return
+			}
 
 			// Call the function that will handle the code review
+			performCodeReview(filePath, detailLevel, userQuery)
 
 		},
 	}
@@ -75,4 +74,15 @@ func createCodeReviewCmd() *cobra.Command {
 	codeReviewCmd.Flags().StringVarP(&detailLevel, "detail", "d", "medium", "Level of review detail (low, medium, high)")
 
 	return codeReviewCmd
+}
+
+// ===== Helpers =====
+func mustGCP() (projectID, location, creds string) {
+	projectID = os.Getenv("GCP_PROJECT_ID")
+	location = os.Getenv("GCP_LOCATION")
+	creds = os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
+	if projectID == "" || location == "" || creds == "" {
+		log.Fatal("Please set GCP_PROJECT_ID, GCP_LOCATION, and GOOGLE_APPLICATION_CREDENTIALS")
+	}
+	return
 }
