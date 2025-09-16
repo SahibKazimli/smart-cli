@@ -244,11 +244,13 @@ func (e *Embedder) EmbedQuery(userInput string) ([]float32, error) {
 	if err != nil {
 		return nil, fmt.Errorf("warning could not create struct")
 	}
+
 	// Check if resp is empty
 	if len(resp.Predictions) == 0 {
 		return nil, fmt.Errorf("warning: empty query does not generate response")
 	}
 	queryEmbedding, err := parsePrediction(resp.Predictions[0])
+
 	if err != nil {
 		return nil, fmt.Errorf("warning")
 	}

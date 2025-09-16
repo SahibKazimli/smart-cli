@@ -27,53 +27,28 @@ func main() {
 	}
 }
 
-func usage() {
-	fmt.Println("smartcli commands:")
-	fmt.Println("  index   Re-index the project into Redis")
-	fmt.Println("  ask     Ask a question using the indexed project context")
-	fmt.Println("")
-	fmt.Println("Usage:")
-	fmt.Println("  smartcli index [--dir .] [--chunk-size 800] [--overlap 50] [--index-name NAME] [--embedding-model text-embedding-005]")
-	fmt.Println("  smartcli ask   --q \"your question\" [--topk 5] [--generation-model gemini-1.5-pro] [--embedding-model text-embedding-005] [--show-context]")
+func startInteractiveMode() {
+	fmt.Println("🚀 SmartCLI Interactive Mode")
+	fmt.Println("Ask questions about your codebase!")
+	fmt.Println("Commands:")
+	fmt.Println("  review <file> - Ask questions about a specific file")
+	fmt.Println("  explain <error> - Get explanations for errors")
+	fmt.Println("  help - Show available commands")
+	fmt.Println("  exit - Quit")
+	fmt.Println()
+
+	fmt.Println("For now, use: smartcli review -f <file> -q \"your question\"")
 }
 
-func createCodeReviewCmd() *cobra.Command {
-	var filePath string
-	var detailLevel string
-	var userQuery string
-
-	codeReviewCmd := &cobra.Command{
-		Use:   "review",
-		Short: "Review code for improvements",
-		Long:  `Analyze code for potential bugs, style improvements, and optimization opportunities.`,
+func createStartCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "start",
+		Short: "Interactive mode - ask questions about your codebase",
+		Long:  `Start an interactive session to ask questions about your codebase`,
 		Run: func(cmd *cobra.Command, args []string) {
-			// If no file path is provided but there are arguments, use the first argument
-			if filePath == "" && len(args) > 0 {
-				filePath = args[0]
-			}
-
-			if filePath == "" {
-				fmt.Println("Error: Please provide a file to review")
-				return
-			}
-			// Require a user query
-			if userQuery == "" {
-				fmt.Println("Error: Please provide a question with -q or --query")
-				fmt.Println("Example: smartcli review -f embedder.go -q \"what does this file do?\"")
-				return
-			}
-
-			// Call the function that will handle the code review
-			performCodeReview(filePath, detailLevel, userQuery)
-
+			startInteractiveMode()
 		},
 	}
-
-	// Add flags specific to code review
-	codeReviewCmd.Flags().StringVarP(&filePath, "file", "f", "", "Path to file for code review")
-	codeReviewCmd.Flags().StringVarP(&detailLevel, "detail", "d", "medium", "Level of review detail (low, medium, high)")
-
-	return codeReviewCmd
 }
 
 // ===== Helpers =====

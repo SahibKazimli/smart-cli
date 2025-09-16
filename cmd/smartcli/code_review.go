@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/spf13/cobra"
 	"os"
 	"path/filepath"
 	"smart-cli/go-backend/chunk_retriever"
@@ -11,12 +12,50 @@ import (
 	"smart-cli/go-backend/generator"
 )
 
+func createCodeReviewCmd() *cobra.Command {
+	var filePath string
+	var detailLevel string
+	var autoExplain bool
+	var userQuery string
+
+	codeReviewCmd := &cobra.Command{
+		Use:   "review",
+		Short: "Review code for improvements",
+		Long:  `Analyze code for potential bugs, style improvements, and optimization opportunities.`,
+		Run: func(cmd *cobra.Command, args []string) {
+			// If no file path is provided but there are arguments, use the first argument
+			if filePath == "" && len(args) > 0 {
+				filePath = args[0]
+			}
+
+			if filePath == "" {
+				fmt.Println("Error: Please provide a file to review")
+				return
+			}
+			// Require a user query
+			if userQuery == "" {
+				fmt.Println("Error: Please provide a question with -q or --query")
+				fmt.Println("Example: smartcli review -f embedder.go -q \"what does this file do?\"")
+				return
+			}
+
+			// Call the function that will handle the code review
+			performCodeReview(filePath, detailLevel, userQuery)
+
+		},
+	}
+
+	// Add flags specific to code review
+	codeReviewCmd.Flags().StringVarP(&filePath, "file", "f", "", "Path to file for analysis (required)")
+	codeReviewCmd.Flags().StringVarP(&detailLevel, "detail", "d", "medium", "Level of detail (low, medium, high)")
+	codeReviewCmd.Flags().StringVarP(&userQuery, "query", "q", "", "Your question about the code")
+	codeReviewCmd.Flags().BoolVar(&autoExplain, "explain", false, "Automatically explain errors/issues in the file")
+
+	return codeReviewCmd
+}
+
 func performCodeReview(filePath string, detailLevel string, userQuery string) {
 	fmt.Printf("Performing %s level code review for: %s\n", detailLevel, filePath)
-	// 1. Run the vector similarity search
-	// 2. Call the AI
-	// 3. Format and display results
-
 	ctx := context.Background()
 
 	// Connect to Redis and resolve index name
@@ -28,7 +67,6 @@ func performCodeReview(filePath string, detailLevel string, userQuery string) {
 		fmt.Printf("Error: failed to get index name: %v\n", err)
 		return
 	}
-
 	// Use the user query for embedding and retrieval
 	_, _, creds := mustGCP()
 	embedderClient, err := embedder.EmbedderClient(ctx, creds, rdb, "")
