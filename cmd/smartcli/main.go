@@ -28,7 +28,7 @@ func main() {
 }
 
 func startInteractiveMode() {
-	fmt.Println("🚀 SmartCLI Interactive Mode")
+	fmt.Println("SmartCLI Interactive Mode")
 	fmt.Println("Ask questions about your codebase!")
 	fmt.Println("Commands:")
 	fmt.Println("  review <file> - Ask questions about a specific file")
