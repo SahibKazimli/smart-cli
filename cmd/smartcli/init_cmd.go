@@ -87,5 +87,5 @@ func setupSmartCLI() {
 		fmt.Println("  smartcli explain \"your error message\"")
 	}
 
-	fmt.Println("\n📚 For more help: smartcli --help")
+	fmt.Println("\nFor more help: smartcli --help")
 }
