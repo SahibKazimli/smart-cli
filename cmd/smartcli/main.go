@@ -16,10 +16,12 @@ func main() {
 	}
 	// Add the code review command
 	rootCmd.AddCommand(createCodeReviewCmd())
+	rootCmd.AddCommand(createErrorCommand())
 
-	// And more commands will be added later
-	// rootCmd.AddCommand()
-	// rootCmd.AddCommand()
+	// Placeholders
+	// rootCmd.AddCommand(createIndexCmd())
+	// rootCmd.AddCommand(createInitCmd())
+	// rootCmd.AddCommand(createStartCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
@@ -28,16 +30,21 @@ func main() {
 }
 
 func startInteractiveMode() {
-	fmt.Println("SmartCLI Interactive Mode")
-	fmt.Println("Ask questions about your codebase!")
-	fmt.Println("Commands:")
-	fmt.Println("  review <file> - Ask questions about a specific file")
-	fmt.Println("  explain <error> - Get explanations for errors")
-	fmt.Println("  help - Show available commands")
-	fmt.Println("  exit - Quit")
+	fmt.Println("SmartCLI - AI-Powered Code Analysis")
 	fmt.Println()
-
-	fmt.Println("For now, use: smartcli review -f <file> -q \"your question\"")
+	fmt.Println("Available Commands:")
+	fmt.Println("   init    - Set up SmartCLI (check environment variables)")
+	fmt.Println("   index   - Index your codebase for AI search")
+	fmt.Println("   review  - Ask questions about specific code files")
+	fmt.Println("   explain - Get AI explanations for error messages")
+	fmt.Println("   start   - Show this help (you are here!)")
+	fmt.Println()
+	fmt.Println("Quick Start:")
+	fmt.Println("1. smartcli init     # Check your setup")
+	fmt.Println("2. smartcli index    # Index your codebase")
+	fmt.Println("3. smartcli review -f main.go -q \"what does this do?\"")
+	fmt.Println()
+	fmt.Println("For detailed help: smartcli <command> --help")
 }
 
 func createStartCmd() *cobra.Command {
