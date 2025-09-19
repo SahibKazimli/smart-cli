@@ -14,14 +14,12 @@ func main() {
 		Long:    "Modular AI-enhanced command line interface for coding assistance",
 		Example: `smartcli review -f embedder.go -q "what does this file do?"`,
 	}
-	// Add the code review command
+	// Add commands
 	rootCmd.AddCommand(createCodeReviewCmd())
 	rootCmd.AddCommand(createErrorCommand())
-
-	// Placeholders
-	// rootCmd.AddCommand(createIndexCmd())
-	// rootCmd.AddCommand(createInitCmd())
-	// rootCmd.AddCommand(createStartCmd())
+	rootCmd.AddCommand(createIndexCmd())
+	rootCmd.AddCommand(createInitCmd())
+	rootCmd.AddCommand(createStartCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
