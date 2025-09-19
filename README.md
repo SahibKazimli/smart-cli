@@ -1,17 +1,17 @@
 ## Smart CLI
-A modular, AI-enhanced command-line interface that provides code review, error explanation, system suggestions, and more, powered by Python RAG/Agent modules and Vertex AI.
+A modular, AI-enhanced command-line interface that provides code review, error explanation, system suggestions, and more, powered by RAG/Agent modules and Vertex AI.
 
 
 
 ## Project Goals
 
-- Create a local-first, intelligent CLI that enhances standard terminal workflows.
+- Create an intelligent CLI that enhances standard terminal workflows.
 - Provide AI-powered insights for code, system diagnostics, and command suggestions.
 - Showcase integration of Go CLI, and cloud LLMs (Vertex AI).
 
 ## Current Development
 
-- Basic CLI command (code-review)
+- Basic CLI command (code-review, error-explanation)
 - Routing internally based on user input, instead of creating tools
 - Repo scanning to enable LLM responses dynamically
 - AI integration using Vertex AI 
