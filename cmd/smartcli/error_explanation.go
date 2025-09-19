@@ -13,9 +13,6 @@ import (
 
 func createErrorCommand() *cobra.Command {
 	var errorText string
-	var filePath string
-	var autoDetect bool
-	var buildErrors bool
 
 	errExplainCmd := &cobra.Command{
 		Use:   "explain",
@@ -35,24 +32,14 @@ func createErrorCommand() *cobra.Command {
 				fmt.Println("Examples:")
 				fmt.Println("smartcli explain -e ")
 			}
+			explainError(errorText)
 		},
 	}
+	errExplainCmd.Flags().StringVarP(&errorText, "error", "e", "", "Error message to explain")
+	return errExplainCmd
 }
 
 // ===== Helpers =====
-
-// For very common errors, get instant feedback
-func getErrorExplanation(message string) map[string]string {
-	explanations := map[string]string{
-		"undefined":             "The identifier is not declared or not accessible in this scope",
-		"cannot use":            "Type mismatch - the value type doesn't match what's expected",
-		"too many":              "You're providing more arguments than the function accepts",
-		"not enough":            "You're providing fewer arguments than the function requires",
-		"imported and not used": "You've imported a package but haven't used it in your code",
-		"declared and not used": "You've declared a variable but haven't used it",
-	}
-	return explanations
-}
 
 func explainError(errorText string) {
 	fmt.Printf("🔍 Explaining error: %s\n", errorText)
