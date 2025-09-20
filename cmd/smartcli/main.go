@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"log"
 	"os"
+	"strings"
 )
 
 func main() {
@@ -36,19 +37,42 @@ func startInteractiveMode() {
 	// Reading user input
 	scanner := bufio.NewScanner(os.Stdin)
 
-	fmt.Println("Available Commands:")
-	fmt.Println("   init    - Set up SmartCLI (check environment variables)")
-	fmt.Println("   index   - Index your codebase for AI search")
-	fmt.Println("   review  - Ask questions about specific code files")
-	fmt.Println("   explain - Get AI explanations for error messages")
-	fmt.Println("   start   - Show this help (you are here!)")
-	fmt.Println()
-	fmt.Println("Quick Start:")
-	fmt.Println("1. smartcli init     # Check your setup")
-	fmt.Println("2. smartcli index    # Index your codebase")
-	fmt.Println("3. smartcli review -f main.go -q \"what does this do?\"")
-	fmt.Println()
-	fmt.Println("For detailed help: smartcli <command> --help")
+	for {
+		fmt.Print("smartcli> ")
+
+		if !scanner.Scan() {
+			break
+		}
+
+		input := strings.TrimSpace(scanner.Text())
+		if input == "" {
+			continue
+		}
+
+		// Handle exit commands
+		if input == "exit" || input == "quit" || input == "q" {
+			fmt.Println("Goodbye!")
+			break
+		}
+
+		// Handle help command
+		if input == "help" || input == "h" {
+			showHelp()
+			continue
+		}
+
+		// Parse and execute commands
+		args := strings.Fields(input)
+		if len(args) == 0 {
+			continue
+		}
+
+		executeInteractiveCommand(args)
+	}
+
+	if err := scanner.Err(); err != nil {
+		fmt.Printf("Error reading input: %v\n", err)
+	}
 }
 
 func createStartCmd() *cobra.Command {
@@ -71,6 +95,23 @@ func mustGCP() (projectID, location, creds string) {
 		log.Fatal("Please set GCP_PROJECT_ID, GCP_LOCATION, and GOOGLE_APPLICATION_CREDENTIALS")
 	}
 	return
+}
+
+func showHelp() {
+	fmt.Println()
+	fmt.Println("Available Commands:")
+	fmt.Println("   init                    - Set up SmartCLI (check environment variables)")
+	fmt.Println("   index                   - Index your codebase for AI search")
+	fmt.Println("   review -f <file> -q <query> - Ask questions about specific code files")
+	fmt.Println("   explain <error_message> - Get AI explanations for error messages")
+	fmt.Println("   help                    - Show this help message")
+	fmt.Println("   exit                    - Exit interactive mode")
+	fmt.Println()
+	fmt.Println("Examples:")
+	fmt.Println("   review -f main.go -q \"what does this do?\"")
+	fmt.Println("   explain \"undefined variable error\"")
+	fmt.Println("   index")
+	fmt.Println()
 }
 
 func executeInteractiveCommand(args []string) {
