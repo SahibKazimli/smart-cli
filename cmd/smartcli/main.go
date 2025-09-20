@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"github.com/spf13/cobra"
 	"log"
@@ -29,7 +30,12 @@ func main() {
 
 func startInteractiveMode() {
 	fmt.Println("SmartCLI - AI-Powered Code Analysis")
+	fmt.Println("Type 'help' for available commands or 'exit' to quit")
 	fmt.Println()
+
+	// Reading user input
+	scanner := bufio.NewScanner(os.Stdin)
+
 	fmt.Println("Available Commands:")
 	fmt.Println("   init    - Set up SmartCLI (check environment variables)")
 	fmt.Println("   index   - Index your codebase for AI search")
@@ -65,4 +71,41 @@ func mustGCP() (projectID, location, creds string) {
 		log.Fatal("Please set GCP_PROJECT_ID, GCP_LOCATION, and GOOGLE_APPLICATION_CREDENTIALS")
 	}
 	return
+}
+
+func executeInteractiveCommand(args []string) {
+	command := args[0]
+
+	switch command {
+	case "init":
+		// Execute init command logic
+		initCmd := createInitCmd()
+		initCmd.Run(initCmd, args[1:])
+
+	case "index":
+		// Execute index command logic
+		indexCmd := createIndexCmd()
+		indexCmd.Run(indexCmd, args[1:])
+
+	case "review":
+		// Execute review command logic
+		reviewCmd := createCodeReviewCmd()
+		// Set the args for cobra to parse
+		reviewCmd.SetArgs(args[1:])
+		if err := reviewCmd.Execute(); err != nil {
+			fmt.Printf("Error executing review: %v\n", err)
+		}
+
+	case "explain":
+		// Execute explain command logic
+		explainCmd := createErrorCommand()
+		explainCmd.SetArgs(args[1:])
+		if err := explainCmd.Execute(); err != nil {
+			fmt.Printf("Error executing explain: %v\n", err)
+		}
+
+	default:
+		fmt.Printf("Unknown command: %s\n", command)
+		fmt.Println("Type 'help' for available commands")
+	}
 }
