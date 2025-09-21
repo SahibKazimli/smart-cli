@@ -3,13 +3,21 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"github.com/joho/godotenv"
 	"github.com/spf13/cobra"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
 func main() {
+
+	_ = godotenv.Load()
+	if exe, err := os.Executable(); err == nil {
+		_ = godotenv.Load(filepath.Join(filepath.Dir(exe), ".env"))
+	}
+
 	var rootCmd = &cobra.Command{
 		Use:     "smartcli",
 		Short:   "AI-enhanced command line interface",
