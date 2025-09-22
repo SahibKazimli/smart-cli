@@ -176,7 +176,9 @@ func ConcurrentChunkRetrieval(rdb *redis.Client,
 		Embedding []float32
 	})
 	resultCh := make(chan []Chunk)
-	errCh := make(chan error)
+
+	// Buffer to prevent blocking workers
+	errCh := make(chan error, len(queries)*2+8)
 
 	// Spawn workers
 	var wg sync.WaitGroup
@@ -184,21 +186,47 @@ func ConcurrentChunkRetrieval(rdb *redis.Client,
 		wg.Add(1)
 		go RetrieveWorker(rdb, queryCh, resultCh, &wg, errCh)
 	}
+
+	// Dispatch queries and then close the input channel
+	go func() {
+		for i := range queries {
+			queryCh <- struct {
+				Query     ChunkQuery
+				Embedding []float32
+			}{
+				Query:     queries[i],
+				Embedding: embeddings[i],
+			}
+		}
+		close(queryCh)
+	}()
+
 	go func() {
 		wg.Wait()
 		close(resultCh)
 		close(errCh)
 	}()
+
+	// Drain errors concurrently so workers never block on errCh sends
+	var lastErr error
+	errDone := make(chan struct{})
+	go func() {
+		defer close(errDone)
+		for err := range errCh {
+			fmt.Println("Warning:", err)
+			lastErr = err
+		}
+	}()
+
+	// Collect results
 	var allChunks []Chunk
 	for res := range resultCh {
 		allChunks = append(allChunks, res...)
 	}
-	var resultErr error
-	for err := range errCh {
-		fmt.Println("Warning:", err)
-		resultErr = err
-	}
-	return allChunks, resultErr
+
+	<-errDone
+
+	return allChunks, lastErr
 }
 
 func parseSearchResults(res any) ([]Chunk, error) {
@@ -274,9 +302,9 @@ func appendChunks(resultsArr []interface{}) []Chunk {
 func RetrieveWorker(
 	rdb *redis.Client,
 	queryCh <-chan struct {
-		Query     ChunkQuery
-		Embedding []float32
-	},
+	Query     ChunkQuery
+	Embedding []float32
+},
 	resultCh chan<- []Chunk,
 	wg *sync.WaitGroup,
 	errCh chan<- error,
