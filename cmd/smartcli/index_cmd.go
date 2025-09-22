@@ -60,7 +60,7 @@ func indexCodebase(dir, indexName string, force bool, model string, chunkSize, o
 		return
 	}
 	defer func() { _ = rdb.Close() }()
-	fmt.Println("✓ Redis connection OK")
+	fmt.Println("Redis connection OK")
 
 	// Ensure GCP credentials exist; mustGCP() will exit if missing.
 	_, _, creds := mustGCP()
@@ -103,6 +103,6 @@ func indexCodebase(dir, indexName string, force bool, model string, chunkSize, o
 		return
 	}
 
-	fmt.Println("✓ Indexing completed")
+	fmt.Println("Indexing completed")
 	fmt.Printf("You can now run:\n  smartcli review -f <file> -q \"what does this do?\"\n")
 }

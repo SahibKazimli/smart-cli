@@ -22,7 +22,7 @@ func createInitCmd() *cobra.Command {
 
 func checkCreds() {
 	// Check environment variables
-	fmt.Println("📋 Checking environment variables...")
+	fmt.Println("Checking environment variables...")
 
 	vars := map[string]string{
 		"GCP_PROJECT_ID":                 os.Getenv("GCP_PROJECT_ID"),
@@ -73,7 +73,7 @@ func setupSmartCLI() {
 	fmt.Println("Redis connection successful")
 
 	// Check if index exists
-	fmt.Println("\n📁 Checking for existing index...")
+	fmt.Println("\nChecking for existing index...")
 	indexName, err := chunk_retriever.GetIndexName(rdb)
 	if err != nil || indexName == "" {
 		fmt.Println("No index found - you'll need to create one")

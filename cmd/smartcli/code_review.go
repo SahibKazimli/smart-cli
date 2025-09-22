@@ -5,10 +5,8 @@ import (
 	"fmt"
 	"github.com/spf13/cobra"
 	"os"
-	"path/filepath"
 	"smart-cli/go-backend/chunk_retriever"
 	"smart-cli/go-backend/embedder"
-	"smart-cli/go-backend/file_resolver"
 	"smart-cli/go-backend/generator"
 )
 
@@ -118,22 +116,6 @@ func createEmbedding(userQuery string, embedderClient *embedder.Embedder) []floa
 		fmt.Printf("Error generating query embedding: %v\n", err)
 	}
 	return queryEmbedding
-}
-
-func getCodeFilesFromDir(dir string) ([]string, error) {
-	var files []string
-
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if !info.IsDir() && file_resolver.IsCodeFile(path) {
-			files = append(files, path)
-		}
-		return nil
-	})
-
-	return files, err
 }
 
 func getFileContent(path string) (string, error) {

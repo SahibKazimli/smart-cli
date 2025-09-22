@@ -42,7 +42,7 @@ func createErrorCommand() *cobra.Command {
 // ===== Helpers =====
 
 func explainError(errorText string) {
-	fmt.Printf("🔍 Explaining error: %s\n", errorText)
+	fmt.Printf("Explaining error: %s\n", errorText)
 
 	ctx := context.Background()
 
