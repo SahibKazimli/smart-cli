@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"smart-cli/go-backend/chunk_retriever"
 
@@ -69,7 +70,11 @@ func (g *Generator) Answer(ctx context.Context, query string, chunks []chunk_ret
 	topK := float32(15)
 	maxTokens := int32(700)
 
-	resp, err := g.client.Models.GenerateContent(ctx, g.modelName, genai.Text(prompt), &genai.GenerateContentConfig{
+	// Per-call timeout
+	callCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+
+	resp, err := g.client.Models.GenerateContent(callCtx, g.modelName, genai.Text(prompt), &genai.GenerateContentConfig{
 		Temperature:     &temp,
 		TopP:            &topP,
 		TopK:            &topK,

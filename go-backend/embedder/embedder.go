@@ -4,17 +4,18 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"google.golang.org/api/option"
 	"io/fs"
 	"math"
 	"os"
 	"path/filepath"
 	"smart-cli/go-backend/chunk_retriever"
 	"sync"
+	"time"
 
 	aiplatform "cloud.google.com/go/aiplatform/apiv1"
 	"cloud.google.com/go/aiplatform/apiv1/aiplatformpb"
 	"github.com/redis/go-redis/v9"
-	"google.golang.org/api/option"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -38,7 +39,7 @@ type FileData struct {
 	Content string
 }
 
-// EmbedderClient creates a new Embedder instance with the Vertex AI Prediction client, Redis client,
+/* // EmbedderClient creates a new Embedder instance with the Vertex AI Prediction client, Redis client,
 // and context, then returns a pointer to it along with nil error.
 func EmbedderClient(ctx context.Context, credsFile string, rdb *redis.Client, modelEndpoint string) (*Embedder, error) {
 	// Initialize Vertex AI Prediction client using a service account JSON key
@@ -62,6 +63,42 @@ func EmbedderClient(ctx context.Context, credsFile string, rdb *redis.Client, mo
 		RDB:           rdb,
 		Ctx:           ctx,
 		ModelEndpoint: endpoint,
+	}, nil
+}*/
+
+func EmbedderClient(ctx context.Context, credsFile string, rdb *redis.Client, model string) (*Embedder, error) {
+	// Validate env for resource building
+	projectID := os.Getenv("GCP_PROJECT_ID")
+	location := os.Getenv("GCP_LOCATION")
+	if projectID == "" || location == "" {
+		return nil, fmt.Errorf("missing GCP_PROJECT_ID or GCP_LOCATION")
+	}
+	// Respect CLI-provided model; default if empty
+	if model == "" {
+		model = "text-embedding-005"
+	}
+
+	// IMPORTANT: use the regional host for Prediction API
+	client, err := aiplatform.NewPredictionClient(
+		ctx,
+		option.WithCredentialsFile(credsFile),
+		option.WithEndpoint(fmt.Sprintf("%s-aiplatform.googleapis.com:443", location)),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build the publisher model resource (not an endpoint host)
+	modelResource := fmt.Sprintf(
+		"projects/%s/locations/%s/publishers/google/models/%s",
+		projectID, location, model,
+	)
+
+	return &Embedder{
+		Client:        client,
+		RDB:           rdb,
+		Ctx:           ctx,
+		ModelEndpoint: modelResource, // consider renaming to ModelResource to avoid confusion
 	}, nil
 }
 
@@ -210,6 +247,10 @@ func (e *Embedder) EmbedContent(content string) ([]float32, error) {
 	instance, err := structpb.NewStruct(map[string]interface{}{
 		"content": content,
 	})
+	// Per-call timeout
+	ctx, cancel := context.WithTimeout(e.Ctx, 20*time.Second)
+	defer cancel()
+
 	if err != nil {
 		return nil, err
 	}
@@ -217,7 +258,7 @@ func (e *Embedder) EmbedContent(content string) ([]float32, error) {
 		Endpoint:  e.ModelEndpoint,
 		Instances: []*structpb.Value{structpb.NewStructValue(instance)},
 	}
-	resp, err := e.Client.Predict(e.Ctx, request)
+	resp, err := e.Client.Predict(ctx, request)
 	if err != nil {
 		return nil, fmt.Errorf("prediction failed: %w", err)
 	}
@@ -232,6 +273,10 @@ func (e *Embedder) EmbedQuery(userInput string) ([]float32, error) {
 	instance, err := structpb.NewStruct(map[string]interface{}{
 		"content": userInput,
 	})
+	// Per-call timeout
+	ctx, cancel := context.WithTimeout(e.Ctx, 20*time.Second)
+	defer cancel()
+
 	if err != nil {
 		return nil, err
 	}
@@ -240,7 +285,7 @@ func (e *Embedder) EmbedQuery(userInput string) ([]float32, error) {
 		Instances: []*structpb.Value{structpb.NewStructValue(instance)},
 	}
 	// Call the Vertex AI API, get response from model
-	resp, err := e.Client.Predict(e.Ctx, queryRequest)
+	resp, err := e.Client.Predict(ctx, queryRequest)
 	if err != nil {
 		return nil, fmt.Errorf("warning could not create struct")
 	}
@@ -425,20 +470,5 @@ func EmbedFileWorker(e *Embedder, file FileData, ch chan<- FileEmbedding, _ *syn
 		Path:      file.Path,
 		Content:   file.Content,
 		Embedding: emb,
-	}
-}
-
-func StoreEmbeddingWorker(rdb *redis.Client, embeddings <-chan FileEmbedding, wg *sync.WaitGroup, errCh chan<- error) {
-	defer wg.Done()
-	for e := range embeddings {
-		key := fmt.Sprintf("index:%s", e.Path)
-		vec := float32ToLEBytes(e.Embedding)
-		if err := rdb.HSet(context.Background(), key, map[string]interface{}{
-			"text":      e.Content,
-			"embedding": vec,
-			"file":      e.Path,
-		}).Err(); err != nil {
-			errCh <- fmt.Errorf("failed to store embedding for %s: %w", e.Path, err)
-		}
 	}
 }
