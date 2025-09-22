@@ -39,7 +39,7 @@ type FileData struct {
 	Content string
 }
 
-/* // EmbedderClient creates a new Embedder instance with the Vertex AI Prediction client, Redis client,
+// EmbedderClient creates a new Embedder instance with the Vertex AI Prediction client, Redis client,
 // and context, then returns a pointer to it along with nil error.
 func EmbedderClient(ctx context.Context, credsFile string, rdb *redis.Client, modelEndpoint string) (*Embedder, error) {
 	// Initialize Vertex AI Prediction client using a service account JSON key
@@ -63,42 +63,6 @@ func EmbedderClient(ctx context.Context, credsFile string, rdb *redis.Client, mo
 		RDB:           rdb,
 		Ctx:           ctx,
 		ModelEndpoint: endpoint,
-	}, nil
-}*/
-
-func EmbedderClient(ctx context.Context, credsFile string, rdb *redis.Client, model string) (*Embedder, error) {
-	// Validate env for resource building
-	projectID := os.Getenv("GCP_PROJECT_ID")
-	location := os.Getenv("GCP_LOCATION")
-	if projectID == "" || location == "" {
-		return nil, fmt.Errorf("missing GCP_PROJECT_ID or GCP_LOCATION")
-	}
-	// Respect CLI-provided model; default if empty
-	if model == "" {
-		model = "text-embedding-005"
-	}
-
-	// IMPORTANT: use the regional host for Prediction API
-	client, err := aiplatform.NewPredictionClient(
-		ctx,
-		option.WithCredentialsFile(credsFile),
-		option.WithEndpoint(fmt.Sprintf("%s-aiplatform.googleapis.com:443", location)),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	// Build the publisher model resource (not an endpoint host)
-	modelResource := fmt.Sprintf(
-		"projects/%s/locations/%s/publishers/google/models/%s",
-		projectID, location, model,
-	)
-
-	return &Embedder{
-		Client:        client,
-		RDB:           rdb,
-		Ctx:           ctx,
-		ModelEndpoint: modelResource, // consider renaming to ModelResource to avoid confusion
 	}, nil
 }
 
