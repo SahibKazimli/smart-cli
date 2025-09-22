@@ -333,6 +333,15 @@ func (e *Embedder) EmbedDirectory(dir string, extensions []string) ([]FileEmbedd
 	embCh := make(chan FileEmbedding)
 	errCh := make(chan error)
 
+	// Start a concurrent error drain to prevent blocks
+	doneErr := make(chan struct{})
+	go func() {
+		defer close(doneErr)
+		for err := range errCh {
+			fmt.Println("Warning:", err)
+		}
+	}()
+
 	base, err := detectBase(dir)
 	if err != nil {
 		return nil, err
@@ -358,15 +367,16 @@ func (e *Embedder) EmbedDirectory(dir string, extensions []string) ([]FileEmbedd
 		close(embCh)
 		close(errCh)
 	}()
+
 	// Collect embeddings
 	var embeddings []FileEmbedding
 	for emb := range embCh {
 		embeddings = append(embeddings, emb)
 	}
-	// Error logs
-	for err := range errCh {
-		fmt.Println("Warning:", err)
-	}
+
+	// Wait for error drain goroutine to finish
+	<-doneErr
+
 	return embeddings, nil
 }
 
