@@ -3,10 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cobra"
 	"smart-cli/go-backend/chunk_retriever"
-	"smart-cli/go-backend/embedder"
 	"smart-cli/go-backend/generator"
 	"strings"
 )
@@ -46,48 +44,12 @@ func explainError(errorText string) {
 
 	ctx := context.Background()
 
-	// Connect to services
-	rdb := chunk_retriever.Connect()
-	defer func() { _ = rdb.Close() }()
-
-	indexName, err := chunk_retriever.GetIndexName(rdb)
-	if err != nil {
-		fmt.Printf("Warning: Could not get index name: %v\n", err)
-	}
-
-	_, _, creds := mustGCP()
-	embedderClient, err := embedder.EmbedderClient(ctx, creds, rdb, "")
-	if err != nil {
-		fmt.Printf("Error creating embedder: %v\n", err)
-		return
-	}
-
-	// Prepare retrieval
-	retrievedChunks := retrieveRelevantChunks(ctx, errorText, embedderClient, rdb, indexName)
-
 	// Generate explanation using AI
-	answer := generateAIExplanation(ctx, errorText, retrievedChunks)
+	answer := generateAIExplanation(ctx, errorText, nil)
 	if answer != "" {
 		fmt.Println("\n===== AI Explanation =====")
 		fmt.Println(answer)
 	}
-}
-
-func retrieveRelevantChunks(ctx context.Context, errorText string, embedderClient *embedder.Embedder, rdb *redis.Client, indexName string) []chunk_retriever.Chunk {
-	searchQuery := fmt.Sprintf("error %s golang programming fix solution", errorText)
-	queryEmbedding := createEmbedding(searchQuery, embedderClient)
-
-	if indexName == "" {
-		return nil
-	}
-
-	chunkQuery := chunk_retriever.PrepareQuery(searchQuery, 5, indexName)
-	retrievedChunks, _ := chunk_retriever.ConcurrentChunkRetrieval(rdb,
-		[]chunk_retriever.ChunkQuery{chunkQuery},
-		[][]float32{queryEmbedding},
-		5)
-	fmt.Printf("Retrieved %d context chunks\n", len(retrievedChunks))
-	return retrievedChunks
 }
 
 func generateAIExplanation(ctx context.Context, errorText string, retrievedChunks []chunk_retriever.Chunk) string {
