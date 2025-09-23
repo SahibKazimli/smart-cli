@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"github.com/spf13/cobra"
 	"os"
+	"path/filepath"
 	"smart-cli/go-backend/chunk_retriever"
 	"smart-cli/go-backend/embedder"
 	"smart-cli/go-backend/generator"
+	"strings"
 )
 
 func createCodeReviewCmd() *cobra.Command {
@@ -37,6 +39,11 @@ func createCodeReviewCmd() *cobra.Command {
 				return
 			}
 
+			// If still no query, use a sensible default
+			if strings.TrimSpace(userQuery) == "" {
+				userQuery = "Summarize this file, list key functions/methods and explain what they do. Highlight any potential issues."
+			}
+
 			// Call the function that will handle the code review
 			performCodeReview(filePath, detailLevel, userQuery)
 
@@ -55,6 +62,25 @@ func createCodeReviewCmd() *cobra.Command {
 func performCodeReview(filePath string, detailLevel string, userQuery string) {
 	fmt.Printf("Performing %s level code review for: %s\n", detailLevel, filePath)
 	ctx := context.Background()
+
+	// Resolve file path (supports bare filenames)
+	resolvedPath, err := resolveFilePath(filePath)
+	if err != nil {
+		fmt.Printf("Error resolving file: %v\n", err)
+		return
+	}
+
+	// Read file content and always include it as a context chunk
+	fileContent, err := getFileContent(resolvedPath)
+	if err != nil {
+		fmt.Printf("Error reading file: %v\n", err)
+		return
+	}
+
+	fileChunk := chunk_retriever.Chunk{
+		Text:     fileContent,
+		Metadata: map[string]string{"file": resolvedPath, "source": "file"},
+	}
 
 	// Connect to Redis and resolve index name
 	rdb := chunk_retriever.Connect()
@@ -87,6 +113,10 @@ func performCodeReview(filePath string, detailLevel string, userQuery string) {
 	}
 
 	fmt.Printf("Retrieved %d context chunks\n", len(retrievedChunks))
+
+	// Always include the target file chunk first so the LLM can answer even if RAG is empty
+	retrievedChunks = append([]chunk_retriever.Chunk{fileChunk}, retrievedChunks...)
+	fmt.Printf("Using %d context chunk(s) (file + %d retrieved)\n", len(retrievedChunks), len(retrievedChunks)-1)
 
 	// Create a prompt that asks the LLM to answer the user's specific question
 	generationPrompt := fmt.Sprintf(`Based on the provided code context, 
@@ -124,4 +154,47 @@ func getFileContent(path string) (string, error) {
 		return "", err
 	}
 	return string(data), nil
+}
+
+// resolveFilePath supports:
+// - Absolute or relative paths
+// - Bare filenames searched from current directory recursively
+func resolveFilePath(input string) (string, error) {
+	// If the path exists as given, use it
+	if _, err := os.Stat(input); err == nil {
+		abs, _ := filepath.Abs(input)
+		return abs, nil
+	}
+	// Try relative to CWD
+	candidate := filepath.Join(".", input)
+	if _, err := os.Stat(candidate); err == nil {
+		abs, _ := filepath.Abs(candidate)
+		return abs, nil
+	}
+	// Search recursively by basename
+	target := filepath.Base(input)
+	var found string
+	_ = filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
+		if err != nil || d == nil || d.IsDir() {
+			return nil
+		}
+		// Skip common large/vendor dirs
+		base := d.Name()
+		if base == ".git" || strings.Contains(path, "/.git/") ||
+			strings.Contains(path, "/node_modules/") ||
+			strings.Contains(path, "/venv/") ||
+			strings.Contains(path, "/.venv/") {
+			return nil
+		}
+		if filepath.Base(path) == target {
+			found = path
+			return filepath.SkipDir // stop early on first match
+		}
+		return nil
+	})
+	if found == "" {
+		return "", fmt.Errorf("file not found: %s", input)
+	}
+	abs, _ := filepath.Abs(found)
+	return abs, nil
 }
