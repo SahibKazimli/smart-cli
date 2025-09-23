@@ -239,7 +239,9 @@ func parseSearchResults(res any) ([]Chunk, error) {
 		if !ok {
 			return out, nil
 		}
-		appendChunks(resultsArr)
+		parsed := appendChunks(resultsArr)
+		out = append(out, parsed...)
+		return out, nil
 	}
 	return out, nil
 }
