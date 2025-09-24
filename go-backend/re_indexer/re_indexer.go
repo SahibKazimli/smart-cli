@@ -75,22 +75,21 @@ func (i *Indexer) IndexFile(ctx context.Context, path string, chunkSize int, ove
 }
 
 func (i *Indexer) ReIndexDirectory(ctx context.Context, dir string, chunkSize, overlap int) error {
-	files, err := filepath.Glob(filepath.Join(dir, "*"))
-	if err != nil {
-		return err
-	}
-	for _, file := range files {
-		// Skip directories
-		info, err := os.Stat(file)
-		if err != nil || info.IsDir() {
-			continue
+
+	return filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
 		}
-		fmt.Printf("Indexing file: %s\n", file)
-		if err := i.IndexFile(ctx, file, chunkSize, overlap); err != nil {
-			fmt.Printf("Warning: failed indexing file %s: %v\n", file, err)
+		if d.IsDir() {
+			return nil
 		}
-	}
-	return nil
+		fmt.Printf("Indexing file: %s\n", path)
+		if err := i.IndexFile(ctx, path, chunkSize, overlap); err != nil {
+			fmt.Printf("Warning: failed indexing file %s: %v\n", path, err)
+		}
+		return nil
+	})
+
 }
 
 // ===== Helpers =====
