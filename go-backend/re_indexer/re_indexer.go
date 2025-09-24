@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/redis/go-redis/v9"
@@ -81,6 +82,17 @@ func (i *Indexer) ReIndexDirectory(ctx context.Context, dir string, chunkSize, o
 			return nil
 		}
 		if d.IsDir() {
+			if shouldSkipDir(d.Name()) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		// Skip dotfiles outright (.DS_Store, .env, .gitignore, etc.)
+		if isDotFile(path) {
+			return nil
+		}
+		// Only index common textual/code files
+		if !isAllowedExtension(path) {
 			return nil
 		}
 		fmt.Printf("Indexing file: %s\n", path)
@@ -112,4 +124,50 @@ func float32ToBytes(vec []float32) []byte {
 		binary.LittleEndian.PutUint32(b[i*4:], math.Float32bits(v))
 	}
 	return b
+}
+
+// ===== Filters =====
+
+var skipDirs = map[string]struct{}{
+	".git":         {},
+	"node_modules": {},
+	"venv":         {},
+	".venv":        {},
+	"dist":         {},
+	"build":        {},
+	"out":          {},
+	"target":       {},
+	"bin":          {},
+	"vendor":       {},
+}
+
+func shouldSkipDir(name string) bool {
+	_, ok := skipDirs[name]
+	return ok
+}
+
+var allowedExt = map[string]struct{}{
+	".go":   {},
+	".md":   {},
+	".txt":  {},
+	".json": {},
+	".yaml": {},
+	".yml":  {},
+	".py":   {},
+	".js":   {},
+	".ts":   {},
+	".tsx":  {},
+	".jsx":  {},
+}
+
+func isAllowedExtension(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	_, ok := allowedExt[ext]
+	return ok
+}
+
+// Skip dotfiles like .DS_Store, .env, .gitignore, etc.
+func isDotFile(path string) bool {
+	base := filepath.Base(path)
+	return strings.HasPrefix(base, ".")
 }
