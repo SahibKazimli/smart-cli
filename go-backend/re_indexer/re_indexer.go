@@ -171,3 +171,57 @@ func isDotFile(path string) bool {
 	base := filepath.Base(path)
 	return strings.HasPrefix(base, ".")
 }
+
+// ===== Concurrent pipeline =====
+
+type chunkJob struct {
+	filePath string
+	chunk    chunker.Chunk
+}
+
+func (i *Indexer) ReIndexDirectory(ctx context.Context, dir string, chunkSize, overlap int) error {
+	// Tunables
+	const fileWorkers = 8
+	const embedWorkers = 10
+
+	filesCh := make(chan string, 256)
+	chunksCh := make(chan chunkJob, 1024)
+	errCh := make(chan error, 64)
+
+}
+
+// Walk directory and push file paths
+func (i *Indexer) walkDirectory(dir string, filesCh chan<- string, wg *sync.WaitGroup) {
+	defer wg.Done()
+	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil // skip unreadable entries
+		}
+		if d.IsDir() {
+			if shouldSkipDir(d.Name()) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if isDotFile(path) || !isAllowedExtension(path) {
+			return nil
+		}
+		filesCh <- path
+		return nil
+	})
+}
+
+func (i *Indexer) processFiles(filesCh <-chan string, chunksCh chan<- chunkJob, errCh chan<- error, chunkSize, overlap int, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for path := range filesCh {
+		fmt.Printf("Indexing file: %s\n", path)
+		chunks, err := chunker.SplitFile(path, chunkSize, overlap)
+		if err != nil {
+			errCh <- fmt.Errorf("split failed for %s: %w", path, err)
+			continue
+		}
+		for _, ch := range chunks {
+			chunksCh <- chunkJob{filePath: path, chunk: ch}
+		}
+	}
+}
