@@ -10,19 +10,20 @@ A modular, AI-enhanced command-line interface that provides code review, error e
 - Showcase integration of Go CLI, and cloud LLMs (Vertex AI).
 
 ## Current Development
-- Routing internally based on user input, instead of creating tools
-- Repo scanning to enable LLM responses dynamically
-- AI integration using Vertex AI 
+- Repo scanning to enable LLM responses dynamically (works but a bit inconsistent)
+- Concurrent index & reindexing of codebases
 - Colored/progress-enhanced terminal output
 - Context/history tracking for smarter suggestions
 
 ## Completed Objectives
 - Parallel chunk retrieval and embedding for performance
 - Basic CLI command (code-review, error-explanation)
+- - AI integration using Vertex AI
 
 ## Sidelined objectives 
 - Additional skills: system-check.
 - Plugin system for modular skill addition.
 - Python code is not going to be used, including skills.
+- Routing internally based on user input, instead of creating tools (unsure, might do tools)
 
 
