@@ -225,3 +225,30 @@ func (i *Indexer) processFiles(filesCh <-chan string, chunksCh chan<- chunkJob, 
 		}
 	}
 }
+
+func (i *Indexer) embedAndStore(ctx context.Context, chunksCh <-chan chunkJob, errCh chan<- error, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for job := range chunksCh {
+		vec, err := i.Embedder.EmbedText(job.chunk.Text)
+		if err != nil {
+			errCh <- fmt.Errorf("embed failed %s [chunk %d]: %w", job.filePath, job.chunk.Index, err)
+			continue
+		}
+		if err := i.ensureIndex(len(vec)); err != nil {
+			errCh <- fmt.Errorf("ensure index failed: %w", err)
+			return
+		}
+		if err := i.storeChunk(ctx, job.filePath, job.chunk.Index, job.chunk.Text, vec); err != nil {
+			errCh <- fmt.Errorf("store failed %s [chunk %d]: %w", job.filePath, job.chunk.Index, err)
+			continue
+		}
+	}
+}
+
+// Drain errors so we don’t block
+func drainErrors(errCh <-chan error, done chan<- struct{}) {
+	defer close(done)
+	for e := range errCh {
+		fmt.Println("Warning:", e)
+	}
+}
