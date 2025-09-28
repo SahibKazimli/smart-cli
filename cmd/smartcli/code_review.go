@@ -3,13 +3,14 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/spf13/cobra"
 	"os"
 	"path/filepath"
 	"smart-cli/go-backend/chunk_retriever"
 	"smart-cli/go-backend/embedder"
 	"smart-cli/go-backend/generator"
 	"strings"
+
+	"github.com/spf13/cobra"
 )
 
 func createCodeReviewCmd() *cobra.Command {
@@ -124,7 +125,7 @@ func performCodeReview(filePath string, detailLevel string, userQuery string) {
 						Provide a %s level of detail in your answer.`, filePath, userQuery, detailLevel)
 
 	// Generate answer/review
-	gen, err := generator.NewAgent(ctx, "gemini-1.5-pro")
+	gen, err := generator.NewAgent(ctx, "gemini-2.5-flash")
 	if err != nil {
 		fmt.Printf("warning: failed to create agent: %v\n", err)
 		return

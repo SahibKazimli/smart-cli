@@ -3,10 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/spf13/cobra"
 	"smart-cli/go-backend/chunk_retriever"
 	"smart-cli/go-backend/generator"
 	"strings"
+
+	"github.com/spf13/cobra"
 )
 
 func createErrorCommand() *cobra.Command {
@@ -65,7 +66,7 @@ Please explain:
 
 Keep the explanation clear, practical, and focused on Go programming.`, errorText)
 
-	gen, err := generator.NewAgent(ctx, "gemini-1.5-pro")
+	gen, err := generator.NewAgent(ctx, "gemini-2.5-flash")
 	if err != nil {
 		fmt.Printf("Error creating AI agent: %v\n", err)
 		return ""

@@ -8,7 +8,7 @@ require (
 	github.com/redis/go-redis/v9 v9.12.1
 	github.com/spf13/cobra v1.10.1
 	google.golang.org/api v0.248.0
-	google.golang.org/genai v1.22.0
+	google.golang.org/genai v1.26.0
 	google.golang.org/protobuf v1.36.7
 )
 
