@@ -75,35 +75,6 @@ func (i *Indexer) IndexFile(ctx context.Context, path string, chunkSize int, ove
 	return nil
 }
 
-func (i *Indexer) ReIndexDirectory(ctx context.Context, dir string, chunkSize, overlap int) error {
-
-	return filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		if d.IsDir() {
-			if shouldSkipDir(d.Name()) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		// Skip dotfiles outright (.DS_Store, .env, .gitignore, etc.)
-		if isDotFile(path) {
-			return nil
-		}
-		// Only index common textual/code files
-		if !isAllowedExtension(path) {
-			return nil
-		}
-		fmt.Printf("Indexing file: %s\n", path)
-		if err := i.IndexFile(ctx, path, chunkSize, overlap); err != nil {
-			fmt.Printf("Warning: failed indexing file %s: %v\n", path, err)
-		}
-		return nil
-	})
-
-}
-
 // ===== Helpers =====
 
 // storeChunk saves a single chunk in Redis under a simple key
