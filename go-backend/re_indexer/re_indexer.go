@@ -188,6 +188,26 @@ func (i *Indexer) ReIndexDirectory(ctx context.Context, dir string, chunkSize, o
 	chunksCh := make(chan chunkJob, 1024)
 	errCh := make(chan error, 64)
 
+	// walk dir
+	var walkWG sync.WaitGroup
+	walkWG.Add(1)
+	go i.walkDirectory(dir, filesCh, &walkWG)
+
+	// file -> chunks (concurrent)
+	var chunkWG sync.WaitGroup
+	for w := 0; w < fileWorkers; w++ {
+		chunkWG.Add(1)
+		go i.processFiles(filesCh, chunksCh, errCh, chunkSize, overlap, &chunkWG)
+	}
+
+	// Close filesCh once walking finishes
+	// then close chunksCh after all chunkers finish
+	go func() {
+		walkWG.Wait()
+		close(filesCh)
+		chunkWG.Wait()
+		close(chunksCh)
+	}()
 }
 
 // Walk directory and push file paths
