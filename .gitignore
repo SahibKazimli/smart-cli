@@ -6,6 +6,10 @@ __pycache__/
 # Go
 *.exe
 *.out
+# Go binaries
+smartcli
+generator_demo
+new_gen_demo
 
 # IDEs
 .vscode/
