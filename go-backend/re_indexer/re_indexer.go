@@ -208,6 +208,24 @@ func (i *Indexer) ReIndexDirectory(ctx context.Context, dir string, chunkSize, o
 		chunkWG.Wait()
 		close(chunksCh)
 	}()
+
+	// chunks -> embed+store (concurrent)
+	var embedWG sync.WaitGroup
+	for w := 0; w < embedWorkers; w++ {
+		embedWG.Add(1)
+		go i.embedAndStore(ctx, chunksCh, errCh, &embedWG)
+	}
+
+	// Drain errors in background so we don't block
+	doneErr := make(chan struct{})
+	go drainErrors(errCh, doneErr)
+
+	// Wait for embedding stage to finish, then close errCh
+	embedWG.Wait()
+	close(errCh)
+	<-doneErr
+
+	return nil
 }
 
 // Walk directory and push file paths
