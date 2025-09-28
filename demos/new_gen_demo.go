@@ -32,9 +32,7 @@ func main() {
 	creds := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
 
 	embeddingModel := "text-embedding-005"
-	generationModel := "gemini-1.5-pro" // Use a stable model
-
-	log.Printf("Using Generation Model: %s", generationModel)
+	// Use centralized model resolution - will check SMARTCLI_MODEL env var
 
 	// Connect to Redis
 	log.Println("Connecting to Redis...")
@@ -43,16 +41,16 @@ func main() {
 		log.Fatal("Failed to connect to Redis")
 	}
 	log.Println("✓ Connected to Redis")
-
+	
 	// Initialize LLM agent
 	ctx := context.Background()
-	log.Printf("Initializing LLM agent with model: %s", generationModel)
-	agent, err := generator.NewAgent(ctx, generationModel)
+	log.Println("Initializing LLM agent...")
+	agent, err := generator.NewAgent(ctx, "")
 	if err != nil {
 		log.Fatalf("Failed to create agent: %v", err)
 	}
 	// Note: No Close() method available in current implementation
-	log.Println("✓ Agent Initialized")
+	log.Printf("✓ Agent Initialized with model: %s", agent.ModelName())
 
 	// Initialize embedder (only if you have GCP credentials)
 	if projectID != "" && location != "" && creds != "" {

@@ -53,13 +53,12 @@ func main() {
 	log.Println("✓ Embedder initialized")
 
 	// Initialize LLM agent
-	generationModel := "gemini-1.5-pro"
-	log.Printf("Initializing LLM agent with model: %s", generationModel)
-	agent, err := generator.NewAgent(ctx, generationModel)
+	log.Println("Initializing LLM agent...")
+	agent, err := generator.NewAgent(ctx, "")
 	if err != nil {
 		log.Fatalf("Failed to create agent: %v", err)
 	}
-	log.Println("✓ Agent Initialized")
+	log.Printf("✓ Agent Initialized with model: %s", agent.ModelName())
 
 	// Manual re-index if requested
 	if *reindexFlag {

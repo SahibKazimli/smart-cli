@@ -65,7 +65,7 @@ Please explain:
 
 Keep the explanation clear, practical, and focused on Go programming.`, errorText)
 
-	gen, err := generator.NewAgent(ctx, "gemini-1.5-pro")
+	gen, err := generator.NewAgent(ctx, "")
 	if err != nil {
 		fmt.Printf("Error creating AI agent: %v\n", err)
 		return ""

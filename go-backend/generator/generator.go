@@ -3,6 +3,7 @@ package generator
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -37,12 +38,32 @@ const SystemPrompt = `
 </systemPrompt>
 `
 
+// DefaultModel is the default generation model used when no specific model is requested
+const DefaultModel = "gemini-2.5-flash"
+
 type Generator struct {
 	modelName string
 	client    *genai.Client
 }
 
+// resolveGenerationModel resolves the model to use based on priority:
+// 1. If requested is non-empty, use it
+// 2. If SMARTCLI_MODEL environment variable is set, use it
+// 3. Otherwise, use DefaultModel
+func resolveGenerationModel(requested string) string {
+	if strings.TrimSpace(requested) != "" {
+		return requested
+	}
+	if envModel := strings.TrimSpace(os.Getenv("SMARTCLI_MODEL")); envModel != "" {
+		return envModel
+	}
+	return DefaultModel
+}
+
 func NewAgent(ctx context.Context, modelName string) (*Generator, error) {
+	resolvedModel := resolveGenerationModel(modelName)
+	fmt.Printf("Using generation model: %s\n", resolvedModel)
+	
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{})
 
 	if err != nil {
@@ -50,9 +71,14 @@ func NewAgent(ctx context.Context, modelName string) (*Generator, error) {
 	}
 
 	return &Generator{
-		modelName: modelName,
+		modelName: resolvedModel,
 		client:    client,
 	}, nil
+}
+
+// ModelName returns the model name used by this generator
+func (g *Generator) ModelName() string {
+	return g.modelName
 }
 
 func (g *Generator) Answer(ctx context.Context, query string, chunks []chunk_retriever.Chunk) (string, error) {
