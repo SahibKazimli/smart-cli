@@ -120,9 +120,10 @@ func performCodeReview(filePath string, detailLevel string, userQuery string) {
 	fmt.Printf("Using %d context chunk(s) (file + %d retrieved)\n", len(retrievedChunks), len(retrievedChunks)-1)
 
 	// Create a prompt that asks the LLM to answer the user's specific question
-	generationPrompt := fmt.Sprintf(`Based on the provided code context, 
-						please answer this question about the file '%s': %s\n\n
-						Provide a %s level of detail in your answer.`, filePath, userQuery, detailLevel)
+	instructions := fmt.Sprintf(
+		"You are analyzing file %s. Provide a %s level of detail. Focus ONLY on function RetrieveChunks if the question is about it.",
+		filePath, detailLevel,
+	)
 
 	// Generate answer/review
 	gen, err := generator.NewAgent(ctx, "gemini-2.5-flash")
@@ -130,7 +131,7 @@ func performCodeReview(filePath string, detailLevel string, userQuery string) {
 		fmt.Printf("warning: failed to create agent: %v\n", err)
 		return
 	}
-	answer, err := gen.Answer(ctx, generationPrompt, retrievedChunks)
+	answer, err := gen.Answer(ctx, userQuery+"\n\n"+instructions, retrievedChunks)
 	if err != nil {
 		fmt.Printf("warning: failed to generate review: %v\n", err)
 		return
