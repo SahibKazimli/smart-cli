@@ -119,8 +119,7 @@ func performCodeReview(filePath string, detailLevel string, userQuery string) {
 	retrievedChunks = append([]chunk_retriever.Chunk{fileChunk}, retrievedChunks...)
 	fmt.Printf("Using %d context chunk(s) (file + %d retrieved)\n", len(retrievedChunks), len(retrievedChunks)-1)
 
-	// Sanitize user query BEFORE embedding
-	rawQuery := userQuery
+	// Sanitize user query before embedding
 	userQuery = strings.TrimSpace(userQuery)
 	if userQuery == "" {
 		userQuery = "Summarize this file."
