@@ -119,6 +119,16 @@ func performCodeReview(filePath string, detailLevel string, userQuery string) {
 	retrievedChunks = append([]chunk_retriever.Chunk{fileChunk}, retrievedChunks...)
 	fmt.Printf("Using %d context chunk(s) (file + %d retrieved)\n", len(retrievedChunks), len(retrievedChunks)-1)
 
+	// Sanitize user query BEFORE embedding
+	rawQuery := userQuery
+	userQuery = strings.TrimSpace(userQuery)
+	if userQuery == "" {
+		userQuery = "Summarize this file."
+	}
+	if !strings.HasSuffix(userQuery, "?") && !strings.HasSuffix(userQuery, ".") {
+		userQuery += "?"
+	}
+
 	// Create a prompt that asks the LLM to answer the user's specific question
 	instructions := fmt.Sprintf(
 		"You are analyzing file %s. Provide a %s level of detail. Focus ONLY on function RetrieveChunks if the question is about it.",
