@@ -116,15 +116,6 @@ func (g *Generator) Answer(ctx context.Context, query string, chunks []chunk_ret
 	return strings.TrimSpace(resp.Text()), nil
 }
 
-// Helper: budget fit
-func fitToBudget(chunks []chunk_retriever.Chunk, max int) []chunk_retriever.Chunk {
-	// estimate per-chunk size and include until limit
-	if len(chunks) > max {
-		return chunks[:max]
-	}
-	return chunks
-}
-
 // Helper: build context (no headers; blank-line separators)
 func buildContext(chunks []chunk_retriever.Chunk) string {
 	const charBudget = 10000
@@ -174,13 +165,21 @@ func assemblePrompt(system, query, ctxText string) string {
 		builder.WriteString(system)
 		builder.WriteString("\n\n")
 	}
-	builder.WriteString("Context:\n")
-	builder.WriteString(ctxText)
-	builder.WriteString("\n\nUser question:\n")
+	builder.WriteString("USER QUESTION (answer this specifically):\n")
 	builder.WriteString(query)
-	builder.WriteString("\n\nInstructions:\n")
-	builder.WriteString("- Use only the Context above; do not invent details.\n")
-	builder.WriteString("- If the context is insufficient, say so briefly.\n")
-	builder.WriteString("- Prefer precise, concise answers; include code when useful.\n")
+	builder.WriteString("\n\n")
+
+	builder.WriteString("CONTEXT (use only what's relevant to the question):\n")
+	builder.WriteString(ctxText)
+	builder.WriteString("\n\n")
+
+	builder.WriteString("CRITICAL INSTRUCTIONS:\n")
+	builder.WriteString("1. Answer ONLY the specific question asked above\n")
+	builder.WriteString("2. If the question asks about 'EmbedQuery', explain ONLY EmbedQuery\n")
+	builder.WriteString("3. If the question asks about a specific function, explain ONLY that function\n")
+	builder.WriteString("4. Do NOT explain other functions unless they are directly called by the target function\n")
+	builder.WriteString("5. Use only information from the Context that is relevant to the question\n")
+	builder.WriteString("6. If the Context doesn't contain the answer, say 'The provided context does not contain information about [topic]'\n")
+
 	return builder.String()
 }
