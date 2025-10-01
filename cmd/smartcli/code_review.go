@@ -131,8 +131,19 @@ func performCodeReview(filePath string, detailLevel string, userQuery string) {
 
 	// Create a prompt that asks the LLM to answer the user's specific question
 	instructions := fmt.Sprintf(
-		"You are analyzing file %s. Provide a %s level of detail. Focus ONLY on function RetrieveChunks if the question is about it.",
-		filePath, detailLevel,
+		`You are analyzing the file %s.
+
+IMPORTANT: Answer ONLY the specific question asked. Do not provide information about other functions unless directly relevant.
+
+Question: %s
+
+Instructions:
+- Focus strictly on answering the question above
+- If the question asks about a specific function, explain ONLY that function
+- Use the provided context to find the relevant information
+- If you cannot find information about what was asked, say so clearly
+- Detail level: %s`,
+		filePath, userQuery, detailLevel,
 	)
 
 	// Generate answer/review
@@ -141,7 +152,11 @@ func performCodeReview(filePath string, detailLevel string, userQuery string) {
 		fmt.Printf("warning: failed to create agent: %v\n", err)
 		return
 	}
-	answer, err := gen.Answer(ctx, userQuery+"\n\n"+instructions, retrievedChunks)
+
+	// Combine query and instructions into a single clear prompt
+	fullPrompt := fmt.Sprintf("%s\n\n%s", instructions, userQuery)
+
+	answer, err := gen.Answer(ctx, fullPrompt, retrievedChunks)
 	if err != nil {
 		fmt.Printf("warning: failed to generate review: %v\n", err)
 		return
