@@ -164,7 +164,31 @@ Instructions:
 	fmt.Println(answer)
 }
 
-// ===== Helpers =====
+// ========== Step Helpers ==========
+
+// normalizeInputs: sanitize and standardize input parameters.
+func normalizeInputs(filePath, detailLevel, userQuery string) (resolvedPath, normDetail, normQuery string, err error) {
+	if detailLevel == "" {
+		detailLevel = "medium"
+	}
+	resolvedPath, err = resolveFilePath(filePath)
+	if err != nil {
+		return "", "", "", err
+	}
+
+	userQuery = strings.TrimSpace(userQuery)
+	if userQuery == "" {
+		userQuery = "Summarize this file."
+	}
+	if !strings.HasSuffix(userQuery, "?") && !strings.HasSuffix(userQuery, ".") {
+		userQuery += "?"
+	}
+
+	fmt.Printf("Performing %s level code review for: %s\n", detailLevel, filePath)
+	return resolvedPath, detailLevel, userQuery, nil
+}
+
+// ===== Existing Helpers =====
 
 func createEmbedding(userQuery string, embedderClient *embedder.Embedder) []float32 {
 	queryEmbedding, err := embedderClient.EmbedQuery(userQuery)
