@@ -4,7 +4,6 @@ A modular, AI-enhanced command-line interface that provides code review, error e
 
 
 ## Project Goals
-
 - Create an intelligent CLI that enhances standard terminal workflows.
 - Provide AI-powered insights for code, system diagnostics, and command suggestions.
 - Showcase integration of Go CLI, and cloud LLMs (Vertex AI).
