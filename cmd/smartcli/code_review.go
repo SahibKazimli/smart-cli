@@ -164,7 +164,7 @@ Instructions:
 	fmt.Println(answer)
 }
 
-// ===== Existing Helpers =====
+// ===== Helpers =====
 
 func createEmbedding(userQuery string, embedderClient *embedder.Embedder) []float32 {
 	queryEmbedding, err := embedderClient.EmbedQuery(userQuery)
