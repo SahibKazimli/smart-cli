@@ -118,41 +118,47 @@ func (g *Generator) Answer(ctx context.Context, query string, chunks []chunk_ret
 
 // Helper: build context (no headers; blank-line separators)
 func buildContext(chunks []chunk_retriever.Chunk) string {
-	const charBudget = 10000
+	const charBudget = 40000
 	if len(chunks) == 0 {
+
 		return ""
 	}
+
 	// Sort by ascending distance (lower score = better)
 	sort.SliceStable(chunks, func(i, j int) bool {
 		return chunks[i].Score < chunks[j].Score
 	})
+
 	// Start building context
 	var builder strings.Builder
+	chunksAdded := 0
+
 	for _, ch := range chunks {
 		txt := strings.TrimSpace(ch.Text)
 		if txt == "" {
 			continue
 		}
-		// Add a blank-line separator between chunks (no headers)
+		// Calculate space needed (text + separator)
+		separator := ""
 		if builder.Len() > 0 {
-			if builder.Len()+2 > charBudget {
-				break
-			}
-			builder.WriteString("\n\n")
+			separator = "\n\n"
+		}
+		spaceNeeded := len(separator) + len(txt)
+
+		// Check if adding this complete chunk would exceed budget
+		if builder.Len()+spaceNeeded > charBudget {
+			// Stop here, don't truncate mid-chunk
+			break
 		}
 
-		remaining := charBudget - builder.Len()
-		if remaining <= 0 {
-			break
+		// Add separator if not first chunk
+		if separator != "" {
+			builder.WriteString(separator)
 		}
-		// If txt is longer than remaining, slice to remaining and append.
-		if len(txt) > remaining {
-			txt = txt[:remaining]
-		}
+
+		// Add the complete chunk
 		builder.WriteString(txt)
-		if builder.Len() > charBudget {
-			break
-		}
+		chunksAdded++
 	}
 	return builder.String()
 }
