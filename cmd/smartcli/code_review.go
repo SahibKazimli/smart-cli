@@ -104,8 +104,6 @@ func performCodeReview(filePath string, detailLevel string, userQuery string) {
 
 	fmt.Printf("Retrieved %d context chunks\n", len(retrievedChunks))
 
-	fmt.Printf("Using %d context chunk(s) (file + %d retrieved)\n", len(retrievedChunks), len(retrievedChunks)-1)
-
 	// Create a prompt that asks the LLM to answer the user's specific question
 	instructions := fmt.Sprintf(
 		`You are analyzing the file %s.
@@ -130,10 +128,7 @@ Instructions:
 		return
 	}
 
-	// Combine query and instructions into a single clear prompt
-	fullPrompt := fmt.Sprintf("%s\n\n%s", instructions, userQuery)
-
-	answer, err := gen.Answer(ctx, fullPrompt, retrievedChunks)
+	answer, err := gen.Answer(ctx, instructions, retrievedChunks)
 	if err != nil {
 		fmt.Printf("warning: failed to generate review: %v\n", err)
 		return
