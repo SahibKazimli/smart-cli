@@ -64,13 +64,6 @@ func performCodeReview(filePath string, detailLevel string, userQuery string) {
 	fmt.Printf("Performing %s level code review for: %s\n", detailLevel, filePath)
 	ctx := context.Background()
 
-	// Resolve file path
-	resolvedPath, err := resolveFilePath(filePath)
-	if err != nil {
-		fmt.Printf("Error resolving file: %v\n", err)
-		return
-	}
-
 	// Connect to Redis and resolve index name
 	rdb := chunk_retriever.Connect()
 	defer func() { _ = rdb.Close() }()
@@ -95,18 +88,6 @@ func performCodeReview(filePath string, detailLevel string, userQuery string) {
 		return
 	}
 
-	// Read file content and always include it as a context chunk
-	fileContent, err := getFileContent(resolvedPath)
-	if err != nil {
-		fmt.Printf("Error reading file: %v\n", err)
-		return
-	}
-
-	fileChunk := chunk_retriever.Chunk{
-		Text:     fileContent,
-		Metadata: map[string]string{"file": resolvedPath, "source": "file"},
-	}
-
 	queryEmbedding := createEmbedding(userQuery, embedderClient)
 	chunkQuery := chunk_retriever.PrepareQuery(userQuery, 10, indexName)
 
@@ -123,8 +104,6 @@ func performCodeReview(filePath string, detailLevel string, userQuery string) {
 
 	fmt.Printf("Retrieved %d context chunks\n", len(retrievedChunks))
 
-	// Always include the target file chunk first so the LLM can answer even if RAG is empty
-	retrievedChunks = append([]chunk_retriever.Chunk{fileChunk}, retrievedChunks...)
 	fmt.Printf("Using %d context chunk(s) (file + %d retrieved)\n", len(retrievedChunks), len(retrievedChunks)-1)
 
 	// Create a prompt that asks the LLM to answer the user's specific question
