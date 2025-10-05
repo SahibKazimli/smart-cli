@@ -60,12 +60,6 @@ func (g *Generator) Answer(ctx context.Context, query string, chunks []chunk_ret
 		return "", fmt.Errorf("failed to generate content: %w", err)
 	}
 
-	// Check if response is nil
-	if resp == nil {
-		return "", fmt.Errorf("received nil response from API")
-	}
-
-	// Extract text from first candidate
 	if len(resp.Candidates) == 0 {
 		return "", fmt.Errorf("no candidates in response")
 	}
@@ -79,21 +73,18 @@ func (g *Generator) Answer(ctx context.Context, query string, chunks []chunk_ret
 	}
 
 	// Use resp.Text() to extract plain text
-	text := ""
-	for _, part := range resp.Candidates[0].Content.Parts {
-		if part != nil && part.Text != "" {
-			text += part.Text
-		}
-	}
-	if text == "" {
+	responseText := resp.Text()
+	if responseText == "" {
 		return "", fmt.Errorf("no text generated")
 	}
 	return strings.TrimSpace(resp.Text()), nil
 }
 
+// ===== Helpers =====
+
 // Helper: build context (no headers; blank-line separators)
 func buildContext(chunks []chunk_retriever.Chunk) string {
-	const charBudget = 40000
+	const charBudget = 50000
 	if len(chunks) == 0 {
 
 		return ""

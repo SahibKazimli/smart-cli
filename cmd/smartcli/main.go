@@ -69,8 +69,11 @@ func startInteractiveMode() {
 			continue
 		}
 
-		// Parse and execute commands
-		args := strings.Fields(input)
+		args, err := parseQuotedArgs(input)
+		if err != nil {
+			fmt.Printf("Error parsing command: %v\n", err)
+			continue
+		}
 		if len(args) == 0 {
 			continue
 		}
@@ -95,6 +98,7 @@ func createStartCmd() *cobra.Command {
 }
 
 // ===== Helpers =====
+
 func mustGCP() (projectID, location, creds string) {
 	projectID = os.Getenv("GCP_PROJECT_ID")
 	location = os.Getenv("GCP_LOCATION")
@@ -157,4 +161,45 @@ func executeInteractiveCommand(args []string) {
 		fmt.Printf("Unknown command: %s\n", command)
 		fmt.Println("Type 'help' for available commands")
 	}
+}
+
+func parseQuotedArgs(input string) ([]string, error) {
+	var args []string
+	var current strings.Builder
+	inQuotes := false
+	escaped := false
+
+	for _, char := range input {
+		if escaped {
+			current.WriteRune(char)
+			escaped = false
+			continue
+		}
+
+		if char == '\\' {
+			escaped = true
+			continue
+		}
+
+		if char == '"' {
+			inQuotes = !inQuotes
+			continue
+		}
+
+		if char == ' ' && !inQuotes {
+			if current.Len() > 0 {
+				args = append(args, current.String())
+				current.Reset()
+			}
+			continue
+		}
+
+		current.WriteRune(char)
+	}
+
+	if current.Len() > 0 {
+		args = append(args, current.String())
+	}
+
+	return args, nil
 }
