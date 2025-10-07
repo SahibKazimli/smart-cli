@@ -72,12 +72,27 @@ func (g *Generator) Answer(ctx context.Context, query string, chunks []chunk_ret
 		return "", fmt.Errorf("no parts in first candidate's content")
 	}
 
-	// Use resp.Text() to extract plain text
-	responseText := resp.Text()
-	if responseText == "" {
-		return "", fmt.Errorf("no text generated")
+	// Extract text from the first valid candidate
+	var textParts []string
+	for _, candidate := range resp.Candidates {
+		if candidate != nil && candidate.Content != nil {
+			for _, part := range candidate.Content.Parts {
+				if part != nil && part.Text != "" {
+					textParts = append(textParts, part.Text)
+				}
+			}
+			if len(textParts) > 0 {
+				break // Found text in this candidate, stop looking
+			}
+		}
 	}
-	return strings.TrimSpace(resp.Text()), nil
+
+	if len(textParts) == 0 {
+		return "", fmt.Errorf("no text parts found in response")
+	}
+
+	responseText := strings.Join(textParts, "")
+	return strings.TrimSpace(responseText), nil
 }
 
 // ===== Helpers =====
