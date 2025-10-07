@@ -40,10 +40,10 @@ func (g *Generator) Answer(ctx context.Context, query string, chunks []chunk_ret
 		return prompt, nil
 	}
 
-	temp := float32(0.2)
-	topP := float32(0.9)
+	temp := float32(0.7)
+	topP := float32(0.95)
 	topK := float32(15)
-	maxTokens := int32(700)
+	maxTokens := int32(2048)
 
 	// Per-call timeout
 	callCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
