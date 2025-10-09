@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"smart-cli/go-backend/chunk_retriever"
 	"smart-cli/go-backend/embedder"
 	"smart-cli/go-backend/generator"
@@ -145,55 +143,4 @@ func createEmbedding(userQuery string, embedderClient *embedder.Embedder) []floa
 		fmt.Printf("Error generating query embedding: %v\n", err)
 	}
 	return queryEmbedding
-}
-
-func getFileContent(path string) (string, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
-}
-
-// resolveFilePath supports:
-// - Absolute or relative paths
-// - Bare filenames searched from current directory recursively
-func resolveFilePath(input string) (string, error) {
-	// If the path exists as given, use it
-	if _, err := os.Stat(input); err == nil {
-		abs, _ := filepath.Abs(input)
-		return abs, nil
-	}
-	// Try relative to CWD
-	candidate := filepath.Join(".", input)
-	if _, err := os.Stat(candidate); err == nil {
-		abs, _ := filepath.Abs(candidate)
-		return abs, nil
-	}
-	// Search recursively by basename
-	target := filepath.Base(input)
-	var found string
-	_ = filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
-		if err != nil || d == nil || d.IsDir() {
-			return nil
-		}
-		// Skip common large/vendor dirs
-		base := d.Name()
-		if base == ".git" || strings.Contains(path, "/.git/") ||
-			strings.Contains(path, "/node_modules/") ||
-			strings.Contains(path, "/venv/") ||
-			strings.Contains(path, "/.venv/") {
-			return nil
-		}
-		if filepath.Base(path) == target {
-			found = path
-			return filepath.SkipDir // stop early on first match
-		}
-		return nil
-	})
-	if found == "" {
-		return "", fmt.Errorf("file not found: %s", input)
-	}
-	abs, _ := filepath.Abs(found)
-	return abs, nil
 }
