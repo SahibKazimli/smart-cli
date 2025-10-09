@@ -146,27 +146,39 @@ func buildContext(chunks []chunk_retriever.Chunk) string {
 
 // Helper: prompt assembly
 func assemblePrompt(system, query, ctxText string) string {
-	var builder strings.Builder
-	// System prompt included up front for non-system-aware callers
-	if system != "" {
-		builder.WriteString(system)
-		builder.WriteString("\n\n")
-	}
-	builder.WriteString("USER QUESTION (answer this specifically):\n")
-	builder.WriteString(query)
-	builder.WriteString("\n\n")
+	return fmt.Sprintf(`<prompt>
+  <meta>
+    <version>1.0</version>
+    <tool>smart-cli</tool>
+    <purpose>Answer user questions based on retrieved context</purpose>
+    <model_guidelines>
+      <temperature>0.7</temperature>
+      <top_p>0.95</top_p>
+      <top_k>15</top_k>
+      <max_tokens>2048</max_tokens>
+    </model_guidelines>
+  </meta>
 
-	builder.WriteString("CONTEXT (use only what's relevant to the question):\n")
-	builder.WriteString(ctxText)
-	builder.WriteString("\n\n")
+  <system>
+    %s
+  </system>
 
-	builder.WriteString("CRITICAL INSTRUCTIONS:\n")
-	builder.WriteString("1. Answer ONLY the specific question asked above\n")
-	builder.WriteString("2. If the question asks about 'EmbedQuery', explain ONLY EmbedQuery\n")
-	builder.WriteString("3. If the question asks about a specific function, explain ONLY that function\n")
-	builder.WriteString("4. Do NOT explain other functions unless they are directly called by the target function\n")
-	builder.WriteString("5. Use only information from the Context that is relevant to the question\n")
-	builder.WriteString("6. If the Context doesn't contain the answer, say 'The provided context does not contain information about [topic]'\n")
+  <user_query>
+    %s
+  </user_query>
 
-	return builder.String()
+  <context>
+    %s
+  </context>
+
+  <instructions>
+    <rule>Answer ONLY the specific question asked above.</rule>
+    <rule>Give an overview of the file’s purpose if relevant.</rule>
+    <rule>If the question refers to a function, explain ONLY that function.</rule>
+    <rule>Do NOT explain unrelated code unless directly referenced.</rule>
+    <rule>Use only information from the provided context.</rule>
+    <rule>If the context lacks the answer, say: "The provided context does not contain information about [topic]."</rule>
+    <format>Use concise, technical explanations suitable for CLI output.</format>
+  </instructions>
+</prompt>`, system, query, ctxText)
 }
