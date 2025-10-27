@@ -2,7 +2,7 @@
 A modular, AI-enhanced command-line interface that provides code review, error explanation, system suggestions, and more, powered by RAG/Agent modules and Vertex AI.
 
 # Project Status: On Pause
-User experience features will be sidelined for the time being as the project scope was bigger than I expected. The project could definitely use some work on a system level, but I have ideas I would like to try out for the time being.  
+User experience features will be sidelined for the time being, but the project is atleast working on a system level. Obviously, I it will need some refinements but I want to explore some other projects. 
 
 ## Project Goals
 - Create an intelligent CLI that enhances standard terminal workflows.
